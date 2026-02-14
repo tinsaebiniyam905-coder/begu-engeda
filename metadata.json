@@ -1,0 +1,7 @@
+{
+  "name": "ቤጉ እንግዳ (Begu Engeda)",
+  "description": "Guest Registration and Police Monitoring System for Benishangul-Gumuz Region Police Commission. Secure monitoring of hotel guests and criminal activities.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
