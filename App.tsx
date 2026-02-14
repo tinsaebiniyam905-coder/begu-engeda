@@ -25,7 +25,8 @@ import {
   CheckCircle2,
   ChevronRight,
   ShieldCheck,
-  Search
+  Search,
+  Filter
 } from 'lucide-react';
 import { 
   BarChart, 
@@ -50,8 +51,8 @@ const INITIAL_WANTED: WantedPerson[] = [
 
 const COLORS = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'];
 
-// Note: Use 'logo.png' as the path for the uploaded police logo image
-const LOGO_PATH = 'https://raw.githubusercontent.com/Anu-Anu/Begu-Engeda/main/logo.png'; // Fallback to a placeholder if local file is missing, but intended for user to use their image.
+// The logo provided in the prompt
+const LOGO_PATH = 'https://raw.githubusercontent.com/Anu-Anu/Begu-Engeda/main/logo.png';
 
 export default function App() {
   const [lang, setLang] = useState<Language>('am');
@@ -63,6 +64,7 @@ export default function App() {
   const [loginData, setLoginData] = useState({ username: '', password: '' });
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [zoomImg, setZoomImg] = useState<string | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
   
   const [hotelProfile, setHotelProfile] = useState<HotelProfile>(() => {
     const saved = localStorage.getItem('hotelProfile');
@@ -85,6 +87,14 @@ export default function App() {
   };
 
   const handleLogout = () => { setUser(null); setView('dashboard'); setIsSidebarOpen(false); };
+
+  // --- Filtering Logic ---
+  const filteredGuests = guests.filter(g => 
+    g.fullName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    g.hotelName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    g.hotelAddress.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    g.nationality.toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
   // --- Guest Management ---
   const [newGuest, setNewGuest] = useState({ fullName: '', nationality: '', roomNumber: '', idPhoto: '' });
@@ -158,8 +168,8 @@ export default function App() {
       <div className="min-h-screen bg-[#020617] flex items-center justify-center p-4">
         <div className="bg-white/5 backdrop-blur-2xl rounded-[3rem] shadow-2xl p-10 w-full max-w-md border border-white/10">
           <div className="text-center mb-10">
-            <div className="relative inline-block">
-              <img src={LOGO_PATH} alt="Police Commission Logo" className="w-32 h-32 rounded-full mx-auto mb-6 shadow-2xl border-4 border-indigo-500/50 object-contain p-1 bg-white" 
+            <div className="relative inline-block mb-6">
+              <img src={LOGO_PATH} alt="Police Commission Logo" className="w-32 h-32 rounded-full mx-auto shadow-2xl border-4 border-indigo-500/50 object-contain p-1 bg-white" 
                 onError={(e) => { e.currentTarget.src = "https://picsum.photos/seed/police/128/128" }} />
               <div className="absolute -bottom-2 -right-2 bg-indigo-600 p-2 rounded-full border-2 border-[#020617] text-white">
                 <ShieldCheck size={20} />
@@ -172,7 +182,7 @@ export default function App() {
           <form onSubmit={handleLogin} className="space-y-6">
             <input type="text" placeholder={t.username} className="w-full bg-black/40 border border-white/10 rounded-2xl px-6 py-4 text-white focus:ring-2 focus:ring-indigo-500 outline-none transition-all placeholder:text-gray-600" value={loginData.username} onChange={e => setLoginData({...loginData, username: e.target.value})} required />
             <input type="password" placeholder={t.password} className="w-full bg-black/40 border border-white/10 rounded-2xl px-6 py-4 text-white focus:ring-2 focus:ring-indigo-500 outline-none transition-all placeholder:text-gray-600" value={loginData.password} onChange={e => setLoginData({...loginData, password: e.target.value})} required />
-            <button className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-black py-5 rounded-2xl shadow-xl transition-all transform active:scale-95 text-lg tracking-widest">
+            <button className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-black py-5 rounded-2xl shadow-xl transition-all transform active:scale-95 text-lg tracking-widest uppercase">
               {t.login}
             </button>
           </form>
@@ -210,8 +220,8 @@ export default function App() {
               <ShieldCheck size={16} />
             </div>
           </div>
-          <h1 className="font-black text-2xl tracking-tight mb-2">{t.appName}</h1>
-          <p className="text-indigo-400 font-black text-sm leading-tight uppercase mb-4 px-2">{t.developedBy}</p>
+          <h1 className="font-black text-2xl tracking-tight mb-2 uppercase">{t.appName}</h1>
+          <p className="text-indigo-400 font-black text-sm leading-tight uppercase mb-4 px-2 font-black">{t.developedBy}</p>
           <div className="inline-block px-4 py-1.5 bg-indigo-600/20 text-indigo-300 border border-indigo-500/20 rounded-full text-[10px] font-black uppercase tracking-widest">{user.role}</div>
         </div>
         <nav className="flex-1 p-8 space-y-3 overflow-y-auto custom-scrollbar">
@@ -234,7 +244,7 @@ export default function App() {
           <NavItem icon={<Bell size={22} />} label={t.notifications} active={view === 'notifications'} count={notifications.length} onClick={() => setView('notifications')} />
         </nav>
         <div className="p-8 border-t border-white/5 space-y-6">
-           <p className="text-[10px] text-indigo-400/60 font-black text-center uppercase tracking-[3px] leading-relaxed">"{t.motto}"</p>
+           <p className="text-[10px] text-indigo-400/60 font-black text-center uppercase tracking-[3px] leading-relaxed font-black">"{t.motto}"</p>
            <button onClick={handleLogout} className="flex items-center justify-center gap-3 w-full py-4 bg-red-500/10 hover:bg-red-600 text-red-500 hover:text-white rounded-2xl transition-all font-black text-xs uppercase shadow-lg shadow-red-950/20">
             <LogOut size={20} /> {t.logout}
           </button>
@@ -247,7 +257,7 @@ export default function App() {
           <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="md:hidden p-3 bg-indigo-50 text-indigo-600 rounded-2xl shadow-inner hover:bg-indigo-100 transition-all"><Plus size={24} /></button>
           <div className="hidden md:block">
             <div className="flex flex-col">
-              <h2 className="text-3xl font-black text-slate-800 tracking-tighter leading-none">
+              <h2 className="text-3xl font-black text-slate-800 tracking-tighter leading-none uppercase">
                 {view === 'dashboard' ? t.dashboard : view === 'registerGuest' ? t.registerGuest : view === 'guestList' ? t.guestList : view === 'settings' ? t.settings : view === 'wantedPersons' ? t.wantedPersons : view === 'reports' ? t.reports : t.notifications}
               </h2>
               <div className="flex items-center gap-2 mt-2">
@@ -263,7 +273,7 @@ export default function App() {
             <div className="h-10 w-px bg-slate-200"></div>
             <div className="flex items-center gap-4 px-5 py-2.5 bg-white rounded-2xl border-2 border-slate-100 shadow-sm hover:shadow-md transition-shadow cursor-pointer">
                <div className="text-right hidden sm:block">
-                  <p className="text-sm font-black text-slate-800 leading-none">{user.username}</p>
+                  <p className="text-sm font-black text-slate-800 leading-none uppercase">{user.username}</p>
                   <p className="text-[9px] text-indigo-500 font-black uppercase mt-1 tracking-widest">{user.role}</p>
                </div>
                <div className="w-12 h-12 bg-gradient-to-br from-indigo-600 to-indigo-800 rounded-2xl flex items-center justify-center text-white font-black shadow-xl shadow-indigo-100 border-2 border-white ring-1 ring-indigo-50">
@@ -354,11 +364,21 @@ export default function App() {
                <div className="p-10 border-b flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 no-print bg-slate-50/30">
                   <div>
                     <h3 className="text-3xl font-black text-slate-800 tracking-tighter leading-none uppercase tracking-widest">{t.guestList}</h3>
-                    <p className="text-indigo-600 text-xs font-black mt-2 uppercase tracking-[3px] opacity-60">Real-Time Law Enforcement Feed</p>
+                    <p className="text-indigo-600 text-xs font-black mt-2 uppercase tracking-[3px] opacity-60">Regional Command Monitoring Feed</p>
                   </div>
                   <div className="flex gap-4 w-full lg:w-auto">
-                    <button onClick={() => window.print()} className="flex-1 lg:flex-none p-4 bg-white border-2 border-slate-100 rounded-2xl hover:bg-slate-50 transition-all shadow-sm flex items-center justify-center gap-3 font-black uppercase text-xs tracking-widest text-slate-600"><Printer size={20}/> {t.print}</button>
-                    <button className="flex-1 lg:flex-none p-4 bg-white border-2 border-slate-100 rounded-2xl hover:bg-slate-50 transition-all shadow-sm flex items-center justify-center gap-3 font-black uppercase text-xs tracking-widest text-slate-600"><Download size={20}/> {t.download}</button>
+                    {/* Search Bar */}
+                    <div className="relative flex-1 lg:w-80">
+                      <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                      <input 
+                        type="text" 
+                        placeholder={t.searchPlaceholder}
+                        className="w-full pl-12 pr-4 py-3 bg-white border-2 border-slate-100 rounded-2xl outline-none focus:border-indigo-400 transition-all font-bold text-sm"
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                      />
+                    </div>
+                    <button onClick={() => window.print()} className="p-4 bg-white border-2 border-slate-100 rounded-2xl hover:bg-slate-50 transition-all shadow-sm flex items-center justify-center gap-3 font-black uppercase text-xs tracking-widest text-slate-600"><Printer size={20}/> {t.print}</button>
                   </div>
                </div>
                <div className="overflow-x-auto">
@@ -374,7 +394,7 @@ export default function App() {
                      </tr>
                    </thead>
                    <tbody className="divide-y divide-slate-100">
-                     {guests.map(g => (
+                     {filteredGuests.map(g => (
                        <tr key={g.id} className="group hover:bg-indigo-50/30 transition-all">
                          <td className="px-10 py-6">
                            <div className="w-16 h-20 rounded-2xl overflow-hidden border-2 border-white shadow-xl ring-2 ring-slate-100 transform group-hover:scale-110 transition-transform cursor-zoom-in" onClick={() => setZoomImg(g.idPhoto)}>
@@ -393,7 +413,7 @@ export default function App() {
                          </td>
                          <td className="px-10 py-6">
                            <p className="text-sm font-black text-slate-600 uppercase tracking-tighter leading-none mb-1">{g.hotelName}</p>
-                           <p className="text-[10px] text-slate-400 font-bold opacity-60">{g.hotelAddress}</p>
+                           <p className="text-[10px] text-slate-400 font-bold opacity-60 uppercase">{g.hotelAddress}</p>
                          </td>
                          <td className="px-10 py-6">
                            {g.isWanted ? (
@@ -415,6 +435,12 @@ export default function App() {
                      ))}
                    </tbody>
                  </table>
+                 {filteredGuests.length === 0 && (
+                   <div className="p-20 text-center text-slate-400 font-black uppercase tracking-widest">
+                      <Search className="mx-auto mb-4 opacity-20" size={48} />
+                      No matching records found.
+                   </div>
+                 )}
                </div>
                {/* Print Only Footer */}
                <div className="hidden print-only mt-24 p-16 border-t-4 border-double border-slate-300">
@@ -433,8 +459,8 @@ export default function App() {
                     </div>
                   </div>
                   <div className="mt-20 text-center">
-                    <p className="text-[10px] font-black text-indigo-600 uppercase tracking-[10px]">{t.motto}</p>
-                    <p className="text-[9px] text-slate-400 mt-2 font-bold">{t.developedBy}</p>
+                    <p className="text-[12px] font-black text-indigo-900 uppercase tracking-[10px]">{t.developedBy}</p>
+                    <p className="text-[10px] font-black text-indigo-600 mt-2 uppercase tracking-[8px]">{t.motto}</p>
                   </div>
                </div>
             </div>
@@ -503,10 +529,10 @@ export default function App() {
                       <p className="text-slate-500 text-sm italic font-medium leading-relaxed border-l-4 border-red-600 pl-4 py-2 bg-red-50/50 rounded-r-2xl">"{w.description}"</p>
                       <div className="mt-10 pt-8 border-t border-slate-100 flex justify-between items-center">
                          <div className="flex flex-col">
-                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-[2px] leading-none mb-2">Bulletin Date</span>
+                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-[2px] leading-none mb-2 font-black">BULLETIN DATE</span>
                             <span className="text-sm font-black text-slate-700 tracking-tighter">{w.postedDate}</span>
                          </div>
-                         <button className="px-8 py-4 bg-[#0f172a] text-white rounded-2xl text-[10px] font-black uppercase tracking-[2px] hover:bg-red-600 transition-all shadow-xl active:scale-95">Profile Detail</button>
+                         <button className="px-8 py-4 bg-[#0f172a] text-white rounded-2xl text-[10px] font-black uppercase tracking-[2px] hover:bg-red-600 transition-all shadow-xl active:scale-95">Detail Profile</button>
                       </div>
                    </div>
                 </div>
@@ -599,7 +625,7 @@ function DashboardView({ user, t, guests, wanted, notifications, setView }: { us
              <div className={`${s.color} absolute top-0 right-0 w-32 h-32 opacity-[0.03] group-hover:scale-150 transition-transform duration-1000 rounded-bl-[5rem]`}></div>
              <div className={`${s.color} w-16 h-16 rounded-[1.5rem] flex items-center justify-center text-white shadow-2xl mb-8 shadow-${s.color.split('-')[1]}-200 transition-transform group-hover:scale-110`}>{s.icon}</div>
              <div>
-               <p className="text-[11px] font-black text-slate-400 uppercase tracking-[3px] mb-2">{s.label}</p>
+               <p className="text-[11px] font-black text-slate-400 uppercase tracking-[3px] mb-2 font-black">{s.label}</p>
                <p className="text-5xl font-black text-slate-800 tracking-tighter">{s.value}</p>
              </div>
            </div>
@@ -608,7 +634,7 @@ function DashboardView({ user, t, guests, wanted, notifications, setView }: { us
        <div className="grid grid-cols-1 xl:grid-cols-3 gap-10">
          <div className="xl:col-span-2 bg-white p-12 rounded-[3.5rem] shadow-xl border border-slate-100">
             <div className="flex justify-between items-center mb-12">
-              <h3 className="text-2xl font-black flex items-center gap-4 tracking-tighter uppercase tracking-[2px]"><PieChartIcon className="text-indigo-600" size={32}/> Regional Activity Audit</h3>
+              <h3 className="text-2xl font-black flex items-center gap-4 tracking-tighter uppercase tracking-[2px] font-black"><PieChartIcon className="text-indigo-600" size={32}/> Regional Activity Audit</h3>
               <div className="bg-slate-50 px-5 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest text-slate-400">Live Telemetry</div>
             </div>
             <div className="h-[400px]">
@@ -625,7 +651,7 @@ function DashboardView({ user, t, guests, wanted, notifications, setView }: { us
          </div>
          <div className="bg-white p-12 rounded-[3.5rem] shadow-xl border border-slate-100 flex flex-col">
            <div className="flex justify-between items-center mb-10">
-             <h3 className="text-2xl font-black flex items-center gap-4 text-red-600 tracking-tighter uppercase tracking-[2px]"><AlertTriangle size={32}/> Security Feed</h3>
+             <h3 className="text-2xl font-black flex items-center gap-4 text-red-600 tracking-tighter uppercase tracking-[2px] font-black"><AlertTriangle size={32}/> Security Feed</h3>
              <button onClick={() => setView('notifications')} className="text-[10px] font-black uppercase text-indigo-600 tracking-widest hover:underline">View All</button>
            </div>
            <div className="flex-1 space-y-8 overflow-y-auto pr-3 custom-scrollbar">
@@ -642,11 +668,11 @@ function DashboardView({ user, t, guests, wanted, notifications, setView }: { us
               {notifications.length === 0 && (
                 <div className="text-center py-24 opacity-30">
                   <CheckCircle2 size={64} className="mx-auto mb-6 text-slate-300"/>
-                  <p className="text-[11px] font-black uppercase tracking-[5px] text-slate-400">Zero Incidents</p>
+                  <p className="text-[11px] font-black uppercase tracking-[5px] text-slate-400 font-black">Zero Incidents</p>
                 </div>
               )}
            </div>
-           <button onClick={() => setView('registerGuest')} className="mt-10 w-full py-5 bg-indigo-600 text-white rounded-[1.5rem] text-xs font-black uppercase tracking-[3px] hover:bg-indigo-700 transition-all shadow-xl shadow-indigo-100 active:scale-95">Register New Guest</button>
+           <button onClick={() => setView('registerGuest')} className="mt-10 w-full py-5 bg-indigo-600 text-white rounded-[1.5rem] text-xs font-black uppercase tracking-[3px] hover:bg-indigo-700 transition-all shadow-xl shadow-indigo-100 active:scale-95 font-black uppercase">Register New Guest</button>
          </div>
        </div>
     </div>
@@ -659,7 +685,7 @@ function ReportView({ t, guests }: { t: any, guests: Guest[] }) {
     <div className="space-y-16">
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
         <div className="bg-white p-12 rounded-[3.5rem] shadow-xl border border-slate-100">
-           <h3 className="text-2xl font-black mb-12 tracking-[4px] uppercase opacity-40 text-center">Identity Demographics</h3>
+           <h3 className="text-2xl font-black mb-12 tracking-[4px] uppercase opacity-40 text-center font-black">Identity Demographics</h3>
            <div className="h-80">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
@@ -673,7 +699,7 @@ function ReportView({ t, guests }: { t: any, guests: Guest[] }) {
            </div>
         </div>
         <div className="bg-white p-12 rounded-[3.5rem] shadow-xl border border-slate-100">
-           <h3 className="text-2xl font-black mb-12 tracking-[4px] uppercase opacity-40 text-center">Growth Trajectory</h3>
+           <h3 className="text-2xl font-black mb-12 tracking-[4px] uppercase opacity-40 text-center font-black">Growth Trajectory</h3>
            <div className="h-80">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={reportData}>
@@ -690,7 +716,7 @@ function ReportView({ t, guests }: { t: any, guests: Guest[] }) {
       <div className="bg-white p-12 rounded-[4rem] shadow-2xl border-4 border-slate-50">
         <div className="flex justify-between items-center mb-12 border-b border-slate-50 pb-8">
           <div>
-            <h3 className="text-3xl font-black uppercase tracking-[5px] text-slate-800 leading-none">Intelligence Command</h3>
+            <h3 className="text-3xl font-black uppercase tracking-[5px] text-slate-800 leading-none font-black">Intelligence Command</h3>
             <p className="text-indigo-600 font-black text-[11px] uppercase tracking-[4px] mt-2 opacity-60">Generate Verified Judicial Documentation</p>
           </div>
           <div className="p-5 bg-indigo-50 text-indigo-600 rounded-[2rem] shadow-inner"><ShieldCheck size={40}/></div>
@@ -711,7 +737,7 @@ function ReportButton({ icon, label, color }: { icon: React.ReactNode, label: st
     <button className={`${color} text-white p-10 rounded-[2.5rem] flex flex-col items-center gap-6 hover:scale-[1.05] active:scale-95 transition-all duration-300 shadow-2xl shadow-${color.split('-')[1]}-200/40 relative group overflow-hidden`}>
       <div className="absolute inset-0 bg-white/5 opacity-0 group-hover:opacity-100 transition-opacity"></div>
       <div className="bg-white/10 p-5 rounded-2xl backdrop-blur-md group-hover:rotate-12 transition-transform duration-500">{icon}</div>
-      <span className="text-xs font-black uppercase tracking-[3px] text-center">{label}</span>
+      <span className="text-xs font-black uppercase tracking-[3px] text-center font-black">{label}</span>
     </button>
   );
 }
