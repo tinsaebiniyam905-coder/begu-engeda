@@ -10,6 +10,8 @@ export interface HotelProfile {
   name: string;
   address: string;
   receptionistName: string;
+  phoneNumber: string;
+  digitalIdPhoto?: string;
 }
 
 export interface Guest {
@@ -21,6 +23,7 @@ export interface Guest {
   hotelName: string;
   hotelAddress: string;
   receptionistName: string;
+  receptionistPhone: string;
   checkInDate: string;
   isWanted?: boolean;
 }
