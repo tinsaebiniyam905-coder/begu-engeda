@@ -50,7 +50,12 @@ export const translations = {
     save: "አስቀምጥ",
     cancel: "ተመለስ",
     zoomImage: "ፎቶውን አሳድገህ እይ",
-    searchPlaceholder: "በሆቴል ስም፣ በአድራሻ ወይም በስም ይፈልጉ..."
+    searchPlaceholder: "በሆቴል ስም፣ በአድራሻ ወይም በስም ይፈልጉ...",
+    setupHotel: "የሆቴል መረጃ ምዝገባ",
+    setupWelcome: "እንኳን ወደ ሲስተሙ በደህና መጡ! እባክዎን መጀመሪያ የሆቴልዎን መረጃ ይሙሉ",
+    hotelDirectory: "የሆቴሎች ዝርዝር",
+    policeSettings: "የፖሊስ ማስተካከያ",
+    appUtility: "የአፕልኬሽኑ አስፈላጊነት"
   },
   en: {
     appName: "Begu Engeda",
@@ -100,7 +105,12 @@ export const translations = {
     save: "Save",
     cancel: "Cancel",
     zoomImage: "Zoom Image",
-    searchPlaceholder: "Search by hotel, address, or name..."
+    searchPlaceholder: "Search by hotel, address, or name...",
+    setupHotel: "Hotel Profile Setup",
+    setupWelcome: "Welcome! Please fill in your hotel details before proceeding",
+    hotelDirectory: "Hotel Directory",
+    policeSettings: "Police Settings",
+    appUtility: "App Utility & Purpose"
   }
 };
 
