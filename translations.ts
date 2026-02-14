@@ -49,7 +49,8 @@ export const translations = {
     edit: "አስተካክል",
     save: "አስቀምጥ",
     cancel: "ተመለስ",
-    zoomImage: "ፎቶውን አሳድገህ እይ"
+    zoomImage: "ፎቶውን አሳድገህ እይ",
+    searchPlaceholder: "በሆቴል ስም፣ በአድራሻ ወይም በስም ይፈልጉ..."
   },
   en: {
     appName: "Begu Engeda",
@@ -98,7 +99,8 @@ export const translations = {
     edit: "Edit",
     save: "Save",
     cancel: "Cancel",
-    zoomImage: "Zoom Image"
+    zoomImage: "Zoom Image",
+    searchPlaceholder: "Search by hotel, address, or name..."
   }
 };
 
