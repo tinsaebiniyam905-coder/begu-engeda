@@ -34,7 +34,9 @@ import {
   ShieldAlert,
   History,
   TrendingUp,
-  Activity
+  Activity,
+  Phone,
+  Fingerprint
 } from 'lucide-react';
 import { 
   BarChart, 
@@ -57,10 +59,8 @@ const INITIAL_WANTED: WantedPerson[] = [
 
 const CHART_COLORS = ['#6366f1', '#f43f5e', '#f59e0b', '#10b981', '#8b5cf6'];
 
-// Professional High-Quality Gold Police Badge Logo
 const LOGO_PATH = 'https://img.icons8.com/color/512/police-badge.png';
 
-// Enhanced Golden Gradient for the Title
 const GOLDEN_TITLE_STYLE = "text-transparent bg-clip-text bg-gradient-to-b from-[#FFFDE7] via-[#FFD700] to-[#B8860B] drop-shadow-[0_2px_4px_rgba(0,0,0,0.3)] font-black";
 
 export default function App() {
@@ -76,7 +76,7 @@ export default function App() {
   const [searchTerm, setSearchTerm] = useState('');
   
   const [allHotels, setAllHotels] = useState<HotelProfile[]>(() => JSON.parse(localStorage.getItem('allHotels') || '[]'));
-  const [hotelProfile, setHotelProfile] = useState<HotelProfile>({ name: '', address: '', receptionistName: '' });
+  const [hotelProfile, setHotelProfile] = useState<HotelProfile>({ name: '', address: '', receptionistName: '', phoneNumber: '', digitalIdPhoto: '' });
 
   const t = translations[lang];
 
@@ -98,12 +98,12 @@ export default function App() {
     setUser(null); 
     setView('dashboard'); 
     setIsSidebarOpen(false); 
-    setHotelProfile({ name: '', address: '', receptionistName: '' });
+    setHotelProfile({ name: '', address: '', receptionistName: '', phoneNumber: '', digitalIdPhoto: '' });
   };
 
   const handleSetupSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (hotelProfile.name && hotelProfile.address && hotelProfile.receptionistName) {
+    if (hotelProfile.name && hotelProfile.address && hotelProfile.receptionistName && hotelProfile.phoneNumber) {
       const exists = allHotels.some(h => h.name.toLowerCase() === hotelProfile.name.toLowerCase() && h.address.toLowerCase() === hotelProfile.address.toLowerCase());
       if (!exists) {
         setAllHotels(prev => [...prev, hotelProfile]);
@@ -141,6 +141,7 @@ export default function App() {
         hotelName: hotelProfile.name,
         hotelAddress: hotelProfile.address,
         receptionistName: hotelProfile.receptionistName,
+        receptionistPhone: hotelProfile.phoneNumber,
         checkInDate: new Date().toISOString().split('T')[0],
         isWanted
       };
@@ -175,13 +176,15 @@ export default function App() {
     setView('wantedPersons');
   };
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>, target: 'guest' | 'wanted') => {
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>, target: 'guest' | 'wanted' | 'digitalId') => {
     const file = e.target.files?.[0];
     if (file) {
       const reader = new FileReader();
       reader.onloadend = () => {
-        if (target === 'guest') setNewGuest(prev => ({ ...prev, idPhoto: reader.result as string }));
-        else setNewWanted(prev => ({ ...prev, photo: reader.result as string }));
+        const result = reader.result as string;
+        if (target === 'guest') setNewGuest(prev => ({ ...prev, idPhoto: result }));
+        else if (target === 'wanted') setNewWanted(prev => ({ ...prev, photo: result }));
+        else if (target === 'digitalId') setHotelProfile(prev => ({ ...prev, digitalIdPhoto: result }));
       };
       reader.readAsDataURL(file);
     }
@@ -210,6 +213,36 @@ export default function App() {
             <button onClick={() => setLang('am')} className={`px-5 py-2 rounded-xl text-[10px] font-black tracking-widest transition-all uppercase ${lang === 'am' ? 'bg-white text-indigo-950 shadow-2xl scale-110' : 'text-gray-500 hover:text-gray-300'}`}>አማርኛ</button>
             <button onClick={() => setLang('en')} className={`px-5 py-2 rounded-xl text-[10px] font-black tracking-widest transition-all uppercase ${lang === 'en' ? 'bg-white text-indigo-950 shadow-2xl scale-110' : 'text-gray-500 hover:text-gray-300'}`}>English</button>
           </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Mandatory Initial Setup View
+  if (view === 'setupHotel' && user.role === UserRole.RECEPTION) {
+    return (
+      <div className="min-h-screen bg-[#f1f5f9] flex items-center justify-center p-4">
+        <div className="bg-white p-14 md:p-20 rounded-[5rem] shadow-2xl w-full max-w-2xl border border-slate-100 animate-in zoom-in-95 duration-500 relative overflow-hidden">
+           <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-50 rounded-bl-full -z-0"></div>
+           <div className="text-center mb-14 relative z-10">
+              <div className="w-28 h-28 bg-indigo-50 text-indigo-600 rounded-[2.5rem] flex items-center justify-center mx-auto mb-10 shadow-inner ring-8 ring-indigo-50">
+                <Building2 size={56} />
+              </div>
+              <h2 className={`text-5xl font-black mb-6 ${GOLDEN_TITLE_STYLE}`}>{t.setupHotel}</h2>
+              <p className="text-slate-500 font-bold max-w-sm mx-auto leading-relaxed text-lg">{t.setupWelcome}</p>
+           </div>
+           <form onSubmit={handleSetupSubmit} className="space-y-8 relative z-10">
+              <FormInput label={t.hotel} value={hotelProfile.name} onChange={v => setHotelProfile({...hotelProfile, name: v})} icon={<Building2 size={28}/>} required />
+              <FormInput label={t.hotelAddress} value={hotelProfile.address} onChange={v => setHotelProfile({...hotelProfile, address: v})} icon={<Globe size={28}/>} required />
+              <FormInput label={t.receptionistName} value={hotelProfile.receptionistName} onChange={v => setHotelProfile({...hotelProfile, receptionistName: v})} icon={<Users size={28}/>} required />
+              <FormInput label={t.phoneNumber} value={hotelProfile.phoneNumber} onChange={v => setHotelProfile({...hotelProfile, phoneNumber: v})} icon={<Phone size={28}/>} type="tel" required />
+              <button className="w-full bg-gradient-to-r from-[#B8860B] via-[#FFD700] to-[#B8860B] text-indigo-950 font-black py-8 rounded-[3rem] shadow-2xl shadow-yellow-100 transition-all uppercase tracking-[8px] text-2xl flex items-center justify-center gap-6 group hover:scale-[1.02] active:scale-95 border-b-4 border-black/10">
+                {t.save} & {t.submit} <ChevronRight size={32} className="group-hover:translate-x-3 transition-transform" />
+              </button>
+           </form>
+           <div className="mt-16 pt-10 border-t border-slate-100 text-center opacity-40">
+              <p className="text-[10px] text-slate-500 font-black uppercase tracking-[8px]">{t.developedBy}</p>
+           </div>
         </div>
       </div>
     );
@@ -296,13 +329,35 @@ export default function App() {
           {view === 'addWanted' && <AddWantedView newWanted={newWanted} setNewWanted={setNewWanted} addWanted={addWanted} t={t} handleFileUpload={handleFileUpload} setZoomImg={setZoomImg} />}
           {view === 'reports' && <ReportView t={t} guests={guests} userRole={user.role} />}
           {view === 'notifications' && <NotificationsView notifications={notifications} setView={setView} t={t} />}
+          {view === 'settings' && user.role === UserRole.RECEPTION && (
+            <ReceptionSettingsView hotelProfile={hotelProfile} setHotelProfile={setHotelProfile} handleFileUpload={handleFileUpload} setZoomImg={setZoomImg} t={t} setView={setView} />
+          )}
+          {view === 'hotelDirectory' && user.role === UserRole.POLICE && (
+            <HotelDirectoryView allHotels={allHotels} t={t} />
+          )}
+          {view === 'utility' && (
+             <div className="bg-white p-20 rounded-[5rem] shadow-2xl border border-slate-100 max-w-5xl mx-auto space-y-16 animate-in slide-in-from-bottom-14 duration-1000 relative overflow-hidden text-center">
+                <div className="w-32 h-32 bg-indigo-50 text-indigo-600 rounded-[3rem] flex items-center justify-center mx-auto mb-12 shadow-inner"><Info size={64} /></div>
+                <h3 className={`text-5xl uppercase tracking-[15px] ${GOLDEN_TITLE_STYLE}`}>{t.appUtility}</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-16 text-left">
+                   <div className="space-y-8 p-12 bg-slate-50 rounded-[4rem] border border-slate-100 shadow-inner group hover:bg-white hover:shadow-2xl transition-all duration-700">
+                      <h4 className="text-3xl font-black uppercase text-indigo-600 border-b-4 border-indigo-100 pb-4 italic">አማርኛ</h4>
+                      <p className="text-slate-600 font-bold text-xl leading-relaxed">ይህ "ቤጉ እንግዳ" አፕልኬሽን በቤንሻንጉል ጉምዝ ክልል ፖሊስ ኮሚሽን የዳበረ ሲሆን፣ በክልሉ ውስጥ ያሉ ማንኛውም ሆቴሎች እንግዶችን በዘመናዊ መልኩ እንዲመዘግቡ እና መረጃውን ለፖሊስ በቀጥታ እንዲያስተላልፉ ይረዳል። ይህም የወንጀል መከላከያ ስራን ይበልጥ ቀልጣፋ ያደርገዋል። ፖሊሱም የትኛው እንግዳ በየትኛው ሆቴል እንዳለ ወዲያውኑ ማየት ይችላል።</p>
+                   </div>
+                   <div className="space-y-8 p-12 bg-slate-50 rounded-[4rem] border border-slate-100 shadow-inner group hover:bg-white hover:shadow-2xl transition-all duration-700">
+                      <h4 className="text-3xl font-black uppercase text-indigo-600 border-b-4 border-indigo-100 pb-4 italic">English</h4>
+                      <p className="text-slate-600 font-bold text-xl leading-relaxed">Developed by the Benishangul Gumuz Region Police Commission, "Begu Engeda" enables hotels to digitize guest registration and share data instantly with law enforcement. This ensures real-time monitoring of all property stays across the region, enhancing security and rapid criminal identification through integrated wanted-person alerts.</p>
+                   </div>
+                </div>
+             </div>
+          )}
         </main>
       </div>
     </div>
   );
 }
 
-// --- Components ---
+// --- Internal Components ---
 
 function NavItem({ icon, label, active, onClick, count }: { icon: React.ReactNode, label: string, active: boolean, onClick: () => void, count?: number }) {
   return (
@@ -345,7 +400,6 @@ function DashboardView({ user, t, guests, wanted, notifications, setView, setZoo
 
   return (
     <div className="space-y-10 animate-in fade-in duration-1000">
-      {/* Top Welcome Section */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
         <div>
           <h3 className={`text-4xl uppercase tracking-widest ${GOLDEN_TITLE_STYLE}`}>System Overview</h3>
@@ -361,7 +415,6 @@ function DashboardView({ user, t, guests, wanted, notifications, setView, setZoo
         </div>
       </div>
 
-      {/* Primary Stats Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
          {stats.map((s, i) => (
            <div key={i} className="bg-white p-8 rounded-[3rem] shadow-sm border border-slate-100 group hover:shadow-2xl hover:-translate-y-2 transition-all duration-500 cursor-pointer relative overflow-hidden" onClick={() => {
@@ -384,18 +437,12 @@ function DashboardView({ user, t, guests, wanted, notifications, setView, setZoo
          ))}
       </div>
 
-      {/* Analytics & Detailed View */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-10">
-        {/* Main Activity Chart */}
         <div className="xl:col-span-2 bg-white p-10 rounded-[3.5rem] shadow-sm border border-slate-100">
            <div className="flex justify-between items-center mb-10">
               <h4 className="text-xl font-black uppercase tracking-[5px] flex items-center gap-4">
                  <TrendingUp className="text-indigo-600" /> Registration Volume
               </h4>
-              <div className="flex gap-2">
-                 <span className="w-3 h-3 bg-indigo-600 rounded-full"></span>
-                 <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Past 7 Days</span>
-              </div>
            </div>
            <div className="h-[400px]">
              <ResponsiveContainer width="100%" height="100%">
@@ -410,10 +457,9 @@ function DashboardView({ user, t, guests, wanted, notifications, setView, setZoo
            </div>
         </div>
 
-        {/* Status Distribution */}
-        <div className="bg-white p-10 rounded-[3.5rem] shadow-sm border border-slate-100">
-           <h4 className="text-xl font-black uppercase tracking-[5px] mb-10 flex items-center gap-4">
-              <Activity className="text-indigo-600" /> Security Ratios
+        <div className="bg-white p-10 rounded-[3.5rem] shadow-sm border border-slate-100 text-center">
+           <h4 className="text-xl font-black uppercase tracking-[5px] mb-10 flex items-center justify-center gap-4">
+              <Activity className="text-indigo-600" /> Security Distribution
            </h4>
            <div className="h-[300px]">
              <ResponsiveContainer width="100%" height="100%">
@@ -426,132 +472,172 @@ function DashboardView({ user, t, guests, wanted, notifications, setView, setZoo
                 </PieChart>
              </ResponsiveContainer>
            </div>
-           <div className="mt-8 space-y-4">
-              <div className="p-5 bg-slate-50 rounded-2xl flex justify-between items-center border border-slate-100">
-                 <span className="text-xs font-black uppercase text-slate-500">Matches Found</span>
-                 <span className="text-lg font-black text-red-600">{pieData[1].value}</span>
-              </div>
-              <div className="p-5 bg-slate-50 rounded-2xl flex justify-between items-center border border-slate-100">
-                 <span className="text-xs font-black uppercase text-slate-500">Clear Records</span>
-                 <span className="text-lg font-black text-emerald-600">{pieData[0].value}</span>
-              </div>
-           </div>
         </div>
       </div>
+    </div>
+  );
+}
 
-      {/* Recent Activity Section */}
-      <div className="bg-white rounded-[3.5rem] shadow-sm border border-slate-100 overflow-hidden">
-         <div className="p-10 border-b flex justify-between items-center bg-slate-50/30">
-            <h4 className="text-xl font-black uppercase tracking-[5px] flex items-center gap-4">
-               <History className="text-indigo-600" /> Recent Ingress Activity
-            </h4>
-            <button onClick={() => setView('guestList')} className="text-[10px] font-black uppercase text-indigo-600 hover:underline tracking-widest flex items-center gap-2">
-               View All Records <ChevronRight size={14} />
-            </button>
-         </div>
-         <div className="overflow-x-auto">
-            <table className="w-full text-left">
-               <thead className="bg-slate-50/50 text-[10px] font-black uppercase text-slate-400">
-                  <tr>
-                     <th className="px-10 py-6">Target Profile</th>
-                     <th className="px-10 py-6">Assigned Hotel</th>
-                     <th className="px-10 py-6">Location/Room</th>
-                     <th className="px-10 py-6 text-center">Status</th>
-                  </tr>
-               </thead>
-               <tbody className="divide-y divide-slate-100">
-                  {lastGuests.map((g: Guest) => (
-                    <tr key={g.id} className="hover:bg-indigo-50/20 transition-colors group">
-                       <td className="px-10 py-5 flex items-center gap-5">
-                          <img src={g.idPhoto} className="w-12 h-14 rounded-xl object-cover shadow-md cursor-zoom-in group-hover:scale-110 transition-transform" onClick={() => setZoomImg(g.idPhoto)} />
-                          <div>
-                             <p className="font-black text-slate-800 uppercase text-sm leading-none mb-1.5">{g.fullName}</p>
-                             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{g.nationality}</p>
-                          </div>
-                       </td>
-                       <td className="px-10 py-5">
-                          <p className="text-xs font-black text-slate-600 uppercase tracking-tight">{g.hotelName}</p>
-                       </td>
-                       <td className="px-10 py-5">
-                          <p className="text-xs font-black text-slate-600 uppercase tracking-tight">Room {g.roomNumber}</p>
-                          <p className="text-[9px] text-slate-400 font-bold uppercase">{g.checkInDate}</p>
-                       </td>
-                       <td className="px-10 py-5 text-center">
-                          {g.isWanted ? (
-                            <span className="px-3 py-1 bg-red-600 text-white text-[9px] font-black rounded-full uppercase shadow-lg">Wanted</span>
-                          ) : (
-                            <span className="px-3 py-1 bg-emerald-500 text-white text-[9px] font-black rounded-full uppercase shadow-md">Clear</span>
-                          )}
-                       </td>
-                    </tr>
-                  ))}
-                  {lastGuests.length === 0 && (
-                    <tr><td colSpan={4} className="p-20 text-center text-slate-300 font-black uppercase tracking-widest opacity-40">No Recent Activity Recorded</td></tr>
-                  )}
-               </tbody>
-            </table>
-         </div>
+function ReceptionSettingsView({ hotelProfile, setHotelProfile, handleFileUpload, setZoomImg, t, setView }: any) {
+  const [tempProfile, setTempProfile] = useState({ ...hotelProfile });
+  const [hasChanges, setHasChanges] = useState(false);
+
+  const handleChange = (field: string, value: string) => {
+    setTempProfile(prev => {
+      const updated = { ...prev, [field]: value };
+      setHasChanges(JSON.stringify(updated) !== JSON.stringify(hotelProfile));
+      return updated;
+    });
+  };
+
+  const onSave = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (hasChanges && !hotelProfile.digitalIdPhoto) {
+      alert(t.verificationRequired);
+      return;
+    }
+    setHotelProfile({ ...tempProfile });
+    alert(t.save + " Success!");
+    setView('dashboard');
+  };
+
+  return (
+    <div className="max-w-3xl mx-auto bg-white p-16 md:p-20 rounded-[5rem] shadow-2xl border border-slate-100 animate-in zoom-in-95 duration-700 relative overflow-hidden">
+      <div className="absolute top-0 right-0 w-40 h-40 bg-indigo-50/50 rounded-bl-full -z-0"></div>
+      <div className="text-center mb-16 relative z-10">
+        <div className="w-24 h-24 bg-indigo-50 text-indigo-600 rounded-[2.5rem] flex items-center justify-center mx-auto mb-8 shadow-inner"><Settings size={56} /></div>
+        <h3 className={`text-4xl uppercase tracking-[10px] ${GOLDEN_TITLE_STYLE}`}>{t.settings}</h3>
+        <p className="text-slate-400 font-bold text-[11px] mt-4 uppercase tracking-[6px] opacity-60">Property Configuration & Identity Hub</p>
       </div>
+      <form onSubmit={onSave} className="space-y-12 relative z-10">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
+          <FormInput label={t.hotel} value={tempProfile.name} onChange={v => handleChange('name', v)} icon={<Building2 size={28}/>} required />
+          <FormInput label={t.hotelAddress} value={tempProfile.address} onChange={v => handleChange('address', v)} icon={<Globe size={28}/>} required />
+          <FormInput label={t.receptionistName} value={tempProfile.receptionistName} onChange={v => handleChange('receptionistName', v)} icon={<Users size={28}/>} required />
+          <FormInput label={t.phoneNumber} value={tempProfile.phoneNumber} onChange={v => handleChange('phoneNumber', v)} icon={<Phone size={28}/>} type="tel" required />
+        </div>
+
+        {hasChanges && (
+          <div className="space-y-8 p-10 bg-amber-50 rounded-[3rem] border-2 border-amber-100 animate-in fade-in slide-in-from-top-4">
+             <div className="flex items-center gap-4 mb-4 text-amber-700">
+                <ShieldAlert size={32} />
+                <p className="font-black uppercase tracking-widest text-sm">{t.verificationRequired}</p>
+             </div>
+             <div className="flex flex-col md:flex-row items-center gap-10">
+                <div className="w-40 h-24 bg-white rounded-2xl border-2 border-amber-200 overflow-hidden flex items-center justify-center cursor-zoom-in" onClick={() => hotelProfile.digitalIdPhoto && setZoomImg(hotelProfile.digitalIdPhoto)}>
+                   {hotelProfile.digitalIdPhoto ? <img src={hotelProfile.digitalIdPhoto} className="w-full h-full object-cover" /> : <Fingerprint size={48} className="text-amber-200" />}
+                </div>
+                <label className="flex-1 block w-full text-center py-5 bg-white border-2 border-amber-200 text-amber-600 rounded-2xl font-black text-xs uppercase cursor-pointer hover:bg-amber-100 transition-all shadow-sm">
+                   <ImageIcon className="inline mr-3" size={20}/> {t.digitalId}
+                   <input type="file" className="hidden" onChange={e => handleFileUpload(e, 'digitalId')} />
+                </label>
+             </div>
+          </div>
+        )}
+
+        <button className="w-full bg-gradient-to-r from-[#B8860B] via-[#FFD700] to-[#B8860B] text-indigo-950 font-black py-8 rounded-[3rem] shadow-2xl shadow-yellow-100 uppercase tracking-[10px] text-2xl hover:shadow-yellow-200/50 transition-all border-b-4 border-black/10 active:scale-95 transform">
+          {t.save}
+        </button>
+      </form>
+    </div>
+  );
+}
+
+function HotelDirectoryView({ allHotels, t }: any) {
+  return (
+    <div className="bg-white rounded-[4rem] shadow-2xl overflow-hidden border border-slate-100 animate-in slide-in-from-bottom-10 duration-700">
+       <div className="p-12 border-b flex justify-between items-center bg-slate-50/50">
+         <div>
+           <h3 className={`text-4xl uppercase tracking-[5px] ${GOLDEN_TITLE_STYLE}`}>{t.hotelDirectory}</h3>
+           <p className="text-[12px] font-black text-indigo-400 uppercase tracking-[6px] mt-4 opacity-50">Authorized Regional Security Audit Feed</p>
+         </div>
+         <button onClick={() => window.print()} className="flex items-center gap-4 px-8 py-4 bg-white border-2 border-slate-100 rounded-[1.5rem] text-[12px] font-black uppercase shadow-lg hover:bg-slate-50 transition-all tracking-widest"><Printer size={24}/> {t.print}</button>
+       </div>
+       <div className="overflow-x-auto">
+         <table className="w-full text-left">
+            <thead className="bg-slate-50 text-[12px] font-black uppercase text-slate-400 border-b">
+              <tr>
+                <th className="px-12 py-10 tracking-[5px]">{t.hotel}</th>
+                <th className="px-12 py-10 tracking-[5px]">{t.hotelAddress}</th>
+                <th className="px-12 py-10 tracking-[5px]">{t.receptionistName}</th>
+                <th className="px-12 py-10 tracking-[5px]">{t.phoneNumber}</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {allHotels.map((h: HotelProfile, i: number) => (
+                <tr key={i} className="hover:bg-indigo-50/20 transition-all group cursor-default">
+                  <td className="px-12 py-10 font-black text-slate-800 text-2xl uppercase tracking-tighter group-hover:translate-x-3 transition-transform duration-500">{h.name}</td>
+                  <td className="px-12 py-10 text-base text-slate-500 font-bold uppercase tracking-tight">{h.address}</td>
+                  <td className="px-12 py-10 text-base text-slate-500 font-bold uppercase tracking-tight">{h.receptionistName}</td>
+                  <td className="px-12 py-10 font-black text-indigo-600 tracking-widest">{h.phoneNumber}</td>
+                </tr>
+              ))}
+              {allHotels.length === 0 && (
+                <tr><td colSpan={4} className="p-40 text-center font-black uppercase text-slate-200 tracking-[15px] opacity-40">No Regional Records Found</td></tr>
+              )}
+            </tbody>
+         </table>
+       </div>
     </div>
   );
 }
 
 function GuestListView({ guests, t, setZoomImg, startEdit, searchTerm, setSearchTerm }: any) {
   return (
-    <div className="bg-white rounded-[4rem] shadow-2xl overflow-hidden border border-slate-100">
-       <div className="p-10 md:p-14 border-b flex flex-col md:flex-row gap-8 justify-between items-center bg-slate-50/50">
+    <div className="bg-white rounded-[5rem] shadow-2xl overflow-hidden border border-slate-100">
+       <div className="p-14 md:p-20 border-b flex flex-col md:flex-row gap-12 justify-between items-center bg-slate-50/50">
           <div>
-            <h3 className={`text-4xl uppercase tracking-widest leading-none ${GOLDEN_TITLE_STYLE}`}>{t.guestList}</h3>
-            <p className="text-[11px] font-black text-indigo-400 uppercase tracking-[5px] mt-3 opacity-60">Digital Surveillance Ledger</p>
+            <h3 className={`text-5xl leading-none ${GOLDEN_TITLE_STYLE}`}>{t.guestList}</h3>
+            <p className="text-[13px] font-black text-indigo-400 uppercase tracking-[8px] mt-6 opacity-40">State Judicial Digital Ledger</p>
           </div>
-          <div className="relative w-full md:w-[500px]">
-            <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-300" size={24} />
-            <input type="text" placeholder={t.searchPlaceholder} className="w-full pl-16 pr-8 py-5 bg-white border-2 border-slate-100 rounded-[1.8rem] outline-none focus:border-indigo-400 font-bold text-lg shadow-sm transition-all" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+          <div className="relative w-full md:w-[600px] group">
+            <Search className="absolute left-8 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-indigo-600 transition-colors duration-500" size={32} />
+            <input type="text" placeholder={t.searchPlaceholder} className="w-full pl-20 pr-10 py-7 bg-white border-[3px] border-slate-100 rounded-[2.5rem] outline-none focus:border-indigo-400 focus:ring-[20px] focus:ring-indigo-50/50 font-bold text-xl shadow-inner transition-all duration-500" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
           </div>
        </div>
        <div className="overflow-x-auto">
           <table className="w-full text-left">
-             <thead className="bg-slate-50 text-[11px] font-black uppercase text-slate-400 border-b">
+             <thead className="bg-slate-50 text-[13px] font-black uppercase text-slate-400 border-b">
                <tr>
-                 <th className="px-12 py-10 tracking-[4px]">{t.idPhoto}</th>
-                 <th className="px-12 py-10 tracking-[4px]">{t.fullName}</th>
-                 <th className="px-12 py-10 tracking-[4px]">{t.hotel}</th>
-                 <th className="px-12 py-10 tracking-[4px]">Status</th>
-                 <th className="px-12 py-10 tracking-[4px] no-print text-center">{t.edit}</th>
+                 <th className="px-16 py-12 tracking-[6px]">{t.idPhoto}</th>
+                 <th className="px-16 py-12 tracking-[6px]">{t.fullName}</th>
+                 <th className="px-16 py-12 tracking-[6px]">{t.hotel}</th>
+                 <th className="px-16 py-12 tracking-[6px]">Status</th>
+                 <th className="px-16 py-12 tracking-[6px] no-print text-center">{t.edit}</th>
                </tr>
              </thead>
              <tbody className="divide-y divide-slate-100">
                {guests.map((g: Guest) => (
-                 <tr key={g.id} className="hover:bg-indigo-50/30 transition-all group">
-                    <td className="px-12 py-7">
-                      <div className="w-20 h-24 rounded-[1.8rem] overflow-hidden shadow-2xl border-4 border-white ring-2 ring-slate-100 transform group-hover:scale-110 transition-all cursor-zoom-in" onClick={() => setZoomImg(g.idPhoto)}>
+                 <tr key={g.id} className="hover:bg-indigo-50/40 transition-all group duration-500">
+                    <td className="px-16 py-10">
+                      <div className="w-28 h-36 rounded-[2.5rem] overflow-hidden shadow-2xl border-[6px] border-white ring-2 ring-slate-100 transform group-hover:scale-110 transition-all duration-700 cursor-zoom-in" onClick={() => setZoomImg(g.idPhoto)}>
                         <img src={g.idPhoto} className="w-full h-full object-cover" />
                       </div>
                     </td>
-                    <td className="px-12 py-7">
-                      <p className="font-black text-slate-800 uppercase text-2xl tracking-tighter leading-none">{g.fullName}</p>
-                      <div className="flex items-center gap-3 mt-3">
-                        <Globe size={16} className="text-indigo-400" />
-                        <p className="text-xs font-black text-slate-400 uppercase tracking-widest">{g.nationality} • ROOM {g.roomNumber}</p>
+                    <td className="px-16 py-10">
+                      <p className="font-black text-slate-800 uppercase text-3xl tracking-tighter leading-none">{g.fullName}</p>
+                      <div className="flex items-center gap-4 mt-5">
+                        <Globe size={20} className="text-indigo-400" />
+                        <p className="text-sm font-black text-slate-400 uppercase tracking-[4px]">{g.nationality} • RM {g.roomNumber}</p>
                       </div>
                     </td>
-                    <td className="px-12 py-7">
-                       <p className="text-base font-black text-slate-600 uppercase tracking-tighter">{g.hotelName}</p>
-                       <p className="text-[10px] text-slate-400 uppercase font-bold tracking-widest">{g.hotelAddress}</p>
+                    <td className="px-16 py-10">
+                       <p className="text-xl font-black text-slate-600 uppercase tracking-tighter">{g.hotelName}</p>
+                       <p className="text-[12px] text-slate-400 uppercase font-bold tracking-[3px]">{g.hotelAddress}</p>
                     </td>
-                    <td className="px-12 py-7">
+                    <td className="px-16 py-10">
                        {g.isWanted ? (
-                         <span className="px-6 py-3 bg-red-600 text-white text-[11px] font-black rounded-full uppercase flex items-center gap-3 w-fit animate-pulse shadow-2xl">
-                            <AlertTriangle size={18}/> Wanted / ተፈላጊ
+                         <span className="px-8 py-4 bg-red-600 text-white text-[12px] font-black rounded-full uppercase flex items-center gap-4 w-fit animate-pulse border-[4px] border-white shadow-2xl shadow-red-200">
+                            <AlertTriangle size={24}/> Wanted
                          </span>
                        ) : (
-                         <span className="px-6 py-3 bg-emerald-500 text-white text-[11px] font-black rounded-full uppercase flex items-center gap-3 w-fit shadow-xl">
-                            <CheckCircle2 size={18}/> Clear / ንፁህ
+                         <span className="px-8 py-4 bg-emerald-500 text-white text-[12px] font-black rounded-full uppercase flex items-center gap-4 w-fit border-[4px] border-white shadow-2xl shadow-emerald-100">
+                            <CheckCircle2 size={24}/> Clear
                          </span>
                        )}
                     </td>
-                    <td className="px-12 py-7 no-print text-center">
-                       <button onClick={() => startEdit(g)} className="p-5 bg-white border border-slate-100 text-indigo-600 rounded-[1.8rem] hover:bg-indigo-600 hover:text-white transition-all shadow-sm"><Edit size={24}/></button>
+                    <td className="px-16 py-10 no-print text-center">
+                       <button onClick={() => startEdit(g)} className="p-7 bg-white border-2 border-slate-100 text-indigo-600 rounded-[2.5rem] hover:bg-indigo-600 hover:text-white transition-all shadow-xl active:scale-90"><Edit size={32}/></button>
                     </td>
                  </tr>
                ))}
@@ -564,34 +650,34 @@ function GuestListView({ guests, t, setZoomImg, startEdit, searchTerm, setSearch
 
 function GuestFormView({ newGuest, setNewGuest, hotelProfile, saveGuest, t, setZoomImg, handleFileUpload, editingGuestId, setEditingGuestId, setView }: any) {
   return (
-    <div className="max-w-4xl mx-auto bg-white p-16 rounded-[4.5rem] shadow-2xl border border-slate-100">
-       <div className="flex justify-between items-start mb-16">
+    <div className="max-w-5xl mx-auto bg-white p-20 rounded-[6rem] shadow-2xl border border-slate-100 animate-in zoom-in-95 duration-700 relative overflow-hidden">
+       <div className="flex justify-between items-start mb-20 relative z-10">
           <div>
-             <h3 className={`text-4xl leading-none mb-4 ${GOLDEN_TITLE_STYLE}`}>{editingGuestId ? t.edit : t.registerGuest}</h3>
-             <p className="text-slate-400 font-bold text-xs uppercase tracking-[5px] opacity-60">Regional Compliance Monitoring Division</p>
+             <h3 className={`text-5xl leading-none mb-6 ${GOLDEN_TITLE_STYLE}`}>{editingGuestId ? t.edit : t.registerGuest}</h3>
+             <p className="text-slate-400 font-bold text-[11px] uppercase tracking-[8px] opacity-40">Regional Compliance Monitoring Division</p>
           </div>
-          {editingGuestId && <button onClick={() => { setEditingGuestId(null); setView('guestList'); }} className="p-4 bg-slate-50 text-slate-400 hover:bg-slate-100 rounded-2xl transition-all"><X size={32}/></button>}
+          {editingGuestId && <button onClick={() => { setEditingGuestId(null); setView('guestList'); }} className="p-6 bg-slate-50 text-slate-400 hover:bg-slate-200 rounded-[2rem] transition-all"><X size={40}/></button>}
        </div>
-       <form onSubmit={saveGuest} className="space-y-12">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
-             <FormInput label={t.fullName} value={newGuest.fullName} onChange={(v: string) => setNewGuest({...newGuest, fullName: v})} required icon={<Users size={26}/>} />
-             <FormInput label={t.nationality} value={newGuest.nationality} onChange={(v: string) => setNewGuest({...newGuest, nationality: v})} required icon={<Globe size={26}/>} />
-             <FormInput label={t.roomNumber} value={newGuest.roomNumber} onChange={(v: string) => setNewGuest({...newGuest, roomNumber: v})} required icon={<Building2 size={26}/>} />
-             <FormInput label={t.hotel} value={hotelProfile.name} disabled icon={<Building2 size={26}/>} />
+       <form onSubmit={saveGuest} className="space-y-16 relative z-10">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-14">
+             <FormInput label={t.fullName} value={newGuest.fullName} onChange={(v: string) => setNewGuest({...newGuest, fullName: v})} required icon={<Users size={32}/>} />
+             <FormInput label={t.nationality} value={newGuest.nationality} onChange={(v: string) => setNewGuest({...newGuest, nationality: v})} required icon={<Globe size={32}/>} />
+             <FormInput label={t.roomNumber} value={newGuest.roomNumber} onChange={(v: string) => setNewGuest({...newGuest, roomNumber: v})} required icon={<Building2 size={32}/>} />
+             <FormInput label={t.hotel} value={hotelProfile.name} disabled icon={<Building2 size={32}/>} />
           </div>
-          <div className="space-y-8">
-             <label className="text-[12px] font-black text-slate-400 uppercase tracking-[6px] ml-1">{t.idPhoto}</label>
-             <div className="flex flex-col sm:flex-row items-center gap-12 bg-slate-50/50 p-12 rounded-[4rem] border-4 border-dashed border-slate-100 hover:border-indigo-200 transition-all group">
-                <div className="w-40 h-56 bg-white rounded-[2.5rem] border-[6px] border-white shadow-2xl overflow-hidden flex items-center justify-center cursor-zoom-in" onClick={() => newGuest.idPhoto && setZoomImg(newGuest.idPhoto)}>
-                  {newGuest.idPhoto ? <img src={newGuest.idPhoto} className="w-full h-full object-cover" /> : <Camera size={64} className="text-slate-100" />}
+          <div className="space-y-10">
+             <label className="text-[14px] font-black text-slate-400 uppercase tracking-[10px] ml-4">{t.idPhoto}</label>
+             <div className="flex flex-col lg:flex-row items-center gap-16 bg-slate-50/50 p-16 rounded-[5rem] border-[6px] border-dashed border-slate-100 hover:border-indigo-200 hover:bg-white transition-all group duration-700">
+                <div className="w-56 h-72 bg-white rounded-[4rem] border-[8px] border-white shadow-2xl overflow-hidden flex items-center justify-center cursor-zoom-in group-hover:scale-105 transition-all duration-700" onClick={() => newGuest.idPhoto && setZoomImg(newGuest.idPhoto)}>
+                  {newGuest.idPhoto ? <img src={newGuest.idPhoto} className="w-full h-full object-cover" /> : <Camera size={80} className="text-slate-100" />}
                 </div>
-                <div className="flex-1 w-full space-y-6">
-                   <label className="block w-full text-center py-7 bg-indigo-600 text-white rounded-[2rem] font-black text-xs uppercase cursor-pointer hover:bg-indigo-700 shadow-2xl transition-all"><Camera className="inline mr-3" size={24}/> {t.capturePhoto} <input type="file" capture="environment" className="hidden" onChange={e => handleFileUpload(e, 'guest')} /></label>
-                   <label className="block w-full text-center py-7 bg-white border-2 border-slate-200 text-slate-600 rounded-[2rem] font-black text-xs uppercase cursor-pointer hover:bg-slate-50 transition-all shadow-sm"><ImageIcon className="inline mr-3" size={24}/> {t.fromGallery} <input type="file" className="hidden" onChange={e => handleFileUpload(e, 'guest')} /></label>
+                <div className="flex-1 w-full space-y-8">
+                   <label className="block w-full text-center py-10 bg-gradient-to-r from-indigo-900 to-indigo-700 text-white rounded-[3rem] font-black text-sm uppercase cursor-pointer hover:shadow-2xl shadow-indigo-100 transition-all transform active:scale-95"><Camera className="inline mr-5" size={32}/> {t.capturePhoto} <input type="file" capture="environment" className="hidden" onChange={e => handleFileUpload(e, 'guest')} /></label>
+                   <label className="block w-full text-center py-10 bg-white border-[3px] border-slate-100 text-slate-600 rounded-[3rem] font-black text-sm uppercase cursor-pointer hover:bg-slate-50 transition-all shadow-md transform active:scale-95"><ImageIcon className="inline mr-5" size={32}/> {t.fromGallery} <input type="file" className="hidden" onChange={e => handleFileUpload(e, 'guest')} /></label>
                 </div>
              </div>
           </div>
-          <button className="w-full bg-gradient-to-r from-indigo-700 to-indigo-500 text-white font-black py-8 rounded-[2.5rem] shadow-2xl shadow-indigo-100 uppercase tracking-[8px] text-2xl transition-all active:scale-[0.98] mt-10">{editingGuestId ? t.save : t.submit}</button>
+          <button className="w-full bg-gradient-to-r from-[#B8860B] via-[#FFD700] to-[#B8860B] text-indigo-950 font-black py-10 rounded-[4rem] shadow-2xl shadow-yellow-100 uppercase tracking-[15px] text-3xl transition-all transform active:scale-[0.98] mt-16 border-b-8 border-black/10">{editingGuestId ? t.save : t.submit}</button>
        </form>
     </div>
   );
@@ -599,25 +685,25 @@ function GuestFormView({ newGuest, setNewGuest, hotelProfile, saveGuest, t, setZ
 
 function WantedPersonsView({ wanted, t, setZoomImg }: any) {
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-12 animate-in fade-in duration-1000">
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-16 animate-in fade-in duration-1000">
        {wanted.map((w: WantedPerson) => (
-         <div key={w.id} className="bg-white rounded-[4rem] shadow-2xl overflow-hidden border-2 border-red-50 hover:border-red-600 transition-all duration-700 group relative transform hover:-translate-y-4">
-            <div className="h-80 relative overflow-hidden">
-              <img src={w.photo} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-1000" />
-              <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-transparent to-transparent opacity-80"></div>
-              <div className="absolute top-8 left-8 bg-red-600 text-white px-6 py-2.5 rounded-[1.2rem] text-[11px] font-black uppercase shadow-2xl border-2 border-white/20 tracking-[4px]">Wanted / ተፈላጊ</div>
-              <button onClick={() => setZoomImg(w.photo)} className="absolute bottom-8 right-8 p-5 bg-white/10 backdrop-blur-xl rounded-2xl text-white hover:bg-white/30 transition-all border border-white/20 shadow-2xl"><Maximize2 size={32}/></button>
+         <div key={w.id} className="bg-white rounded-[5rem] shadow-2xl overflow-hidden border-2 border-red-50 hover:border-red-600 transition-all duration-1000 group relative transform hover:-translate-y-6">
+            <div className="h-[450px] relative overflow-hidden">
+              <img src={w.photo} className="w-full h-full object-cover group-hover:scale-125 transition-transform duration-[2000ms]" />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-transparent to-transparent opacity-90"></div>
+              <div className="absolute top-10 left-10 bg-red-600 text-white px-8 py-3.5 rounded-[1.8rem] text-[12px] font-black uppercase shadow-2xl border-2 border-white/20 tracking-[6px] italic">WANTED / ተፈላጊ</div>
+              <button onClick={() => setZoomImg(w.photo)} className="absolute bottom-10 right-10 p-6 bg-white/10 backdrop-blur-2xl rounded-[1.8rem] text-white hover:bg-white/40 transition-all border-2 border-white/20 shadow-2xl"><Maximize2 size={40}/></button>
             </div>
-            <div className="p-12 space-y-5">
-              <h4 className="text-4xl font-black uppercase text-slate-800 tracking-tighter leading-none">{w.fullName}</h4>
-              <p className="text-[12px] text-red-600 font-black uppercase tracking-[4px] inline-block px-4 py-2 bg-red-50 rounded-xl">CRIME: {w.crime}</p>
-              <p className="text-lg text-slate-500 italic font-bold leading-relaxed border-l-[6px] border-red-600 pl-6 py-3 bg-red-50/30 rounded-r-[2rem] line-clamp-2">"{w.description}"</p>
-              <div className="mt-10 pt-10 border-t border-slate-100 flex justify-between items-center">
+            <div className="p-14 space-y-8">
+              <h4 className="text-5xl font-black uppercase text-slate-800 tracking-tighter leading-none group-hover:text-red-700 transition-colors duration-500">{w.fullName}</h4>
+              <p className="text-[14px] text-red-600 font-black uppercase tracking-[6px] inline-block px-6 py-3 bg-red-50 rounded-2xl border-2 border-red-100 italic">INCIDENT: {w.crime}</p>
+              <p className="text-xl text-slate-500 italic font-bold leading-relaxed border-l-[10px] border-red-600 pl-8 py-5 bg-red-50/40 rounded-r-[3rem] line-clamp-3">"{w.description}"</p>
+              <div className="mt-14 pt-14 border-t border-slate-100 flex justify-between items-center">
                  <div className="flex flex-col">
-                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-[3px] leading-none mb-3 opacity-60">Registry Date</span>
-                    <span className="text-base font-black text-slate-700 tracking-tighter">{w.postedDate}</span>
+                    <span className="text-[11px] font-black text-slate-400 uppercase tracking-[5px] leading-none mb-4 opacity-40">Inscription Date</span>
+                    <span className="text-xl font-black text-slate-700 tracking-tighter">{w.postedDate}</span>
                  </div>
-                 <button onClick={() => setZoomImg(w.photo)} className="px-10 py-5 bg-[#0f172a] text-white rounded-[1.8rem] text-[11px] font-black uppercase tracking-widest hover:bg-red-600 transition-all shadow-xl active:scale-95 border-2 border-white/10">Full Profile</button>
+                 <button onClick={() => setZoomImg(w.photo)} className="px-12 py-6 bg-[#020617] text-white rounded-[2.5rem] text-[12px] font-black uppercase tracking-widest hover:bg-red-600 transition-all shadow-2xl border-b-4 border-white/10 italic">Audit Profile</button>
               </div>
             </div>
          </div>
@@ -628,26 +714,27 @@ function WantedPersonsView({ wanted, t, setZoomImg }: any) {
 
 function AddWantedView({ newWanted, setNewWanted, addWanted, t, handleFileUpload, setZoomImg }: any) {
   return (
-    <div className="max-w-2xl mx-auto bg-white p-16 rounded-[4rem] shadow-2xl border border-slate-100 animate-in zoom-in-95 duration-500">
-       <div className="text-center mb-12">
-          <div className="w-20 h-20 bg-red-100 text-red-600 rounded-[2rem] flex items-center justify-center mx-auto mb-8 shadow-inner ring-8 ring-red-50"><AlertTriangle size={48} /></div>
-          <h3 className="text-3xl font-black uppercase tracking-widest text-red-600 mb-2">{t.policeNotice}</h3>
-          <p className="text-slate-400 font-bold text-[10px] uppercase tracking-[5px] opacity-60">Digital Criminal Registry Hub</p>
+    <div className="max-w-3xl mx-auto bg-white p-20 rounded-[5.5rem] shadow-2xl border border-slate-100 animate-in zoom-in-95 duration-700 relative overflow-hidden">
+       <div className="absolute top-0 right-0 w-64 h-64 bg-red-50/50 blur-[80px] rounded-full -translate-x-1/2 -translate-y-1/2 -z-0"></div>
+       <div className="text-center mb-16 relative z-10">
+          <div className="w-24 h-24 bg-red-100 text-red-600 rounded-[2.5rem] flex items-center justify-center mx-auto mb-10 shadow-inner ring-[12px] ring-red-50"><AlertTriangle size={64} /></div>
+          <h3 className="text-4xl font-black uppercase tracking-[6px] text-red-600 mb-4">{t.policeNotice}</h3>
+          <p className="text-slate-400 font-bold text-[12px] uppercase tracking-[8px] opacity-40 italic">Digital Criminal Registry Hub</p>
        </div>
-       <form onSubmit={addWanted} className="space-y-10">
-          <FormInput label={t.fullName} value={newWanted.fullName} onChange={(v: string) => setNewWanted({...newWanted, fullName: v})} required icon={<Users size={26}/>} />
-          <FormInput label={t.crime} value={newWanted.crime} onChange={(v: string) => setNewWanted({...newWanted, crime: v})} required icon={<AlertTriangle size={26}/>} />
-          <FormInput label={t.description} value={newWanted.description} onChange={(v: string) => setNewWanted({...newWanted, description: v})} icon={<FileText size={26}/>} />
-          <div className="space-y-8">
-             <label className="text-[12px] font-black text-slate-400 uppercase tracking-[6px] ml-1">{t.idPhoto}</label>
-             <div className="flex items-center gap-12 bg-red-50/30 p-10 rounded-[3.5rem] border-4 border-dashed border-red-100 group transition-all">
-                <div className="w-32 h-32 bg-white rounded-[2rem] border-[6px] border-white shadow-2xl overflow-hidden flex items-center justify-center cursor-zoom-in group-hover:scale-105 transition-all" onClick={() => newWanted.photo && setZoomImg(newWanted.photo)}>
-                  {newWanted.photo ? <img src={newWanted.photo} className="w-full h-full object-cover" /> : <ImageIcon size={56} className="text-red-100" />}
+       <form onSubmit={addWanted} className="space-y-12 relative z-10">
+          <FormInput label={t.fullName} value={newWanted.fullName} onChange={(v: string) => setNewWanted({...newWanted, fullName: v})} required icon={<Users size={32}/>} />
+          <FormInput label={t.crime} value={newWanted.crime} onChange={(v: string) => setNewWanted({...newWanted, crime: v})} required icon={<AlertTriangle size={32}/>} />
+          <FormInput label={t.description} value={newWanted.description} onChange={(v: string) => setNewWanted({...newWanted, description: v})} icon={<FileText size={32}/>} />
+          <div className="space-y-10">
+             <label className="text-[14px] font-black text-slate-400 uppercase tracking-[10px] ml-4">{t.idPhoto}</label>
+             <div className="flex items-center gap-16 bg-red-50/30 p-14 rounded-[4.5rem] border-[6px] border-dashed border-red-100 group transition-all duration-700">
+                <div className="w-40 h-40 bg-white rounded-[3rem] border-[10px] border-white shadow-2xl overflow-hidden flex items-center justify-center cursor-zoom-in group-hover:scale-110 transition-all duration-700" onClick={() => newWanted.photo && setZoomImg(newWanted.photo)}>
+                  {newWanted.photo ? <img src={newWanted.photo} className="w-full h-full object-cover" /> : <ImageIcon size={72} className="text-red-100" />}
                 </div>
-                <label className="flex-1 block w-full text-center py-7 bg-white border-2 border-red-100 text-red-600 rounded-[2rem] font-black text-sm uppercase cursor-pointer hover:bg-red-50 transition-all shadow-sm tracking-[3px]">Upload Profile Image <input type="file" className="hidden" onChange={e => handleFileUpload(e, 'wanted')} /></label>
+                <label className="flex-1 block w-full text-center py-9 bg-white border-4 border-red-100 text-red-600 rounded-[2.5rem] font-black text-sm uppercase cursor-pointer hover:bg-red-100 transition-all shadow-md tracking-[5px]">Upload Evidence Image <input type="file" className="hidden" onChange={e => handleFileUpload(e, 'wanted')} /></label>
              </div>
           </div>
-          <button className="w-full bg-gradient-to-r from-red-700 to-red-500 text-white font-black py-8 rounded-[2.5rem] shadow-2xl shadow-red-100 uppercase tracking-[8px] text-2xl transition-all transform active:scale-95 mt-8">Publish Bulletin</button>
+          <button className="w-full bg-gradient-to-r from-red-800 to-red-600 text-white font-black py-10 rounded-[3.5rem] shadow-2xl shadow-red-200 uppercase tracking-[12px] text-3xl transition-all transform active:scale-95 mt-12 border-b-8 border-black/20">Publish Judicial Bulletin</button>
        </form>
     </div>
   );
@@ -655,17 +742,17 @@ function AddWantedView({ newWanted, setNewWanted, addWanted, t, handleFileUpload
 
 function ReportView({ t, guests, userRole }: { t: any, guests: Guest[], userRole: UserRole }) {
   return (
-    <div className="space-y-12 animate-in fade-in duration-700">
-       <div className="bg-white p-16 md:p-24 rounded-[5rem] shadow-2xl border-4 border-slate-50 text-center space-y-16">
+    <div className="space-y-16 animate-in fade-in duration-1000">
+       <div className="bg-white p-20 md:p-32 rounded-[6rem] shadow-2xl border-[10px] border-slate-50 text-center space-y-20 relative overflow-hidden">
           <div className="flex flex-col items-center">
-             <div className="w-24 h-24 bg-indigo-50 text-indigo-600 rounded-[2.5rem] flex items-center justify-center mb-10 shadow-inner ring-8 ring-indigo-50/50"><FileBarChart size={56} /></div>
-             <h3 className={`text-4xl uppercase tracking-[8px] text-slate-800 leading-none ${GOLDEN_TITLE_STYLE}`}>{userRole === UserRole.POLICE ? "Regional Command Oversight" : "Property Activity Audit"}</h3>
+             <div className="w-32 h-32 bg-indigo-50 text-indigo-600 rounded-[3.5rem] flex items-center justify-center mb-12 shadow-inner ring-[15px] ring-indigo-50/50"><FileBarChart size={72} /></div>
+             <h3 className={`text-5xl uppercase tracking-[12px] leading-tight ${GOLDEN_TITLE_STYLE}`}>{userRole === UserRole.POLICE ? "Regional Command Oversight Feed" : "Property Activity Audit Ledger"}</h3>
           </div>
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-10">
-             <ReportButton icon={<Download size={36}/>} label="Excel (.xlsx)" color="bg-emerald-700" />
-             <ReportButton icon={<FileText size={36}/>} label="Word (.docx)" color="bg-blue-800" />
-             <ReportButton icon={<PieChartIcon size={36}/>} label="PPT (.pptx)" color="bg-orange-700" />
-             <ReportButton icon={<Printer size={36}/>} label="Official Report" color="bg-slate-900" />
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-12">
+             <ReportButton icon={<Download size={48}/>} label="Excel (.xlsx)" color="bg-emerald-800" />
+             <ReportButton icon={<FileText size={48}/>} label="Word (.docx)" color="bg-blue-900" />
+             <ReportButton icon={<PieChartIcon size={48}/>} label="PPT (.pptx)" color="bg-orange-800" />
+             <ReportButton icon={<Printer size={48}/>} label="Judicial PDF" color="bg-slate-900" />
           </div>
        </div>
     </div>
@@ -674,43 +761,39 @@ function ReportView({ t, guests, userRole }: { t: any, guests: Guest[], userRole
 
 function ReportButton({ icon, label, color }: any) {
   return (
-    <button className={`${color} text-white p-12 rounded-[3.5rem] flex flex-col items-center gap-8 hover:scale-[1.1] active:scale-95 transition-all duration-500 shadow-2xl relative group overflow-hidden`}>
-      <div className="absolute inset-0 bg-white/10 opacity-0 group-hover:opacity-100 transition-opacity"></div>
-      <div className="bg-white/10 p-6 rounded-[1.8rem] backdrop-blur-md group-hover:rotate-12 transition-transform duration-500">{icon}</div>
-      <span className="text-[11px] font-black uppercase tracking-[4px] font-black text-center leading-tight">{label}</span>
+    <button className={`${color} text-white p-14 rounded-[4rem] flex flex-col items-center gap-10 hover:scale-[1.15] active:scale-95 transition-all duration-700 shadow-2xl group relative overflow-hidden border-b-8 border-black/20`}>
+      <div className="bg-white/10 p-8 rounded-[2.5rem] backdrop-blur-xl group-hover:rotate-[20deg] transition-transform duration-700">{icon}</div>
+      <span className="text-[13px] font-black uppercase tracking-[5px] text-center">{label}</span>
     </button>
   );
 }
 
 function NotificationsView({ notifications, setView, t }: any) {
   return (
-    <div className="max-w-4xl mx-auto space-y-10 animate-in slide-in-from-bottom-12 duration-700">
-       <div className="flex items-center gap-6 mb-8 px-6">
-          <div className="w-16 h-16 bg-indigo-50 text-indigo-600 rounded-[1.8rem] flex items-center justify-center shadow-inner ring-4 ring-indigo-50"><Bell size={40} /></div>
-          <h3 className={`text-4xl uppercase tracking-[6px] ${GOLDEN_TITLE_STYLE}`}>Critical Alerts</h3>
+    <div className="max-w-5xl mx-auto space-y-12 animate-in slide-in-from-bottom-16 duration-1000">
+       <div className="flex items-center gap-8 mb-12 px-8">
+          <div className="w-20 h-20 bg-indigo-50 text-indigo-600 rounded-[2rem] flex items-center justify-center shadow-inner ring-[10px] ring-indigo-50 group hover:scale-110 transition-transform duration-700"><Bell size={48} /></div>
+          <h3 className={`text-5xl tracking-[8px] ${GOLDEN_TITLE_STYLE}`}>Critical Alerts</h3>
        </div>
        {notifications.map((n: any) => (
-         <div key={n.id} className="p-12 bg-white rounded-[4rem] border-l-[20px] border-red-600 shadow-2xl flex gap-12 group hover:-translate-x-4 transition-all duration-300 relative overflow-hidden">
-            <div className="absolute top-0 right-0 w-40 h-40 bg-red-600/5 rounded-bl-[10rem] -z-0"></div>
-            <div className="w-24 h-24 bg-red-600 text-white rounded-[2rem] flex items-center justify-center shrink-0 shadow-2xl shadow-red-200 border-4 border-white relative z-10"><AlertTriangle size={48}/></div>
+         <div key={n.id} className="p-14 bg-white rounded-[5rem] border-l-[30px] border-red-600 shadow-2xl flex gap-14 group hover:-translate-x-6 transition-all duration-500 relative overflow-hidden">
+            <div className="w-28 h-28 bg-red-600 text-white rounded-[2.5rem] flex items-center justify-center shrink-0 shadow-2xl shadow-red-200 border-[6px] border-white relative z-10 group-hover:scale-110 transition-transform duration-700"><AlertTriangle size={56}/></div>
             <div className="flex-1 relative z-10">
-              <div className="flex justify-between items-start mb-4">
-                <p className="text-[11px] font-black text-slate-400 uppercase tracking-[5px] font-black leading-none">{n.timestamp}</p>
+              <div className="flex justify-between items-start mb-6">
+                <p className="text-[12px] font-black text-slate-400 uppercase tracking-[6px] leading-none opacity-60">{n.timestamp}</p>
               </div>
-              <h4 className="text-3xl font-black text-red-950 uppercase leading-tight mt-2 group-hover:underline transition-all font-black">{n.title}</h4>
-              <p className="text-xl text-slate-600 font-bold mt-6 leading-relaxed opacity-80">{n.message}</p>
-              <div className="mt-10 flex gap-6">
-                 <button onClick={() => setView('guestList')} className="px-10 py-4 bg-red-600 text-white rounded-[1.5rem] text-[11px] font-black uppercase tracking-widest shadow-2xl shadow-red-200 hover:bg-red-700 transition-all transform active:scale-95">Intercept Subject</button>
+              <h4 className="text-4xl font-black text-red-950 uppercase leading-tight mt-3 group-hover:underline transition-all font-black">{n.title}</h4>
+              <p className="text-2xl text-slate-600 font-bold mt-8 opacity-70">Detection Log: {n.message}</p>
+              <div className="mt-12 flex gap-8">
+                 <button onClick={() => setView('guestList')} className="px-12 py-5 bg-red-600 text-white rounded-[2rem] text-[12px] font-black uppercase tracking-[5px] shadow-2xl shadow-red-200 hover:bg-red-700 transition-all transform active:scale-95 italic border-b-4 border-black/20">Intercept Target</button>
               </div>
             </div>
          </div>
        ))}
        {notifications.length === 0 && (
-         <div className="text-center py-40 bg-white rounded-[5rem] border-4 border-dashed border-slate-100 flex flex-col items-center group">
-            <div className="w-32 h-32 bg-slate-50 rounded-full flex items-center justify-center mb-12 shadow-inner group-hover:scale-110 transition-transform duration-700">
-               <CheckCircle2 size={72} className="text-slate-200" />
-            </div>
-            <p className="text-4xl font-black uppercase tracking-[25px] text-slate-200 leading-none">All Secure</p>
+         <div className="text-center py-56 bg-white rounded-[6rem] border-[8px] border-dashed border-slate-100 flex flex-col items-center">
+            <CheckCircle2 size={80} className="text-slate-200 mb-10" />
+            <p className="text-5xl font-black uppercase tracking-[35px] text-slate-200 leading-none">ALL SECURE</p>
          </div>
        )}
     </div>
