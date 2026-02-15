@@ -18,8 +18,8 @@ const ZONES = ["Assosa Zone", "Kamashi Zone", "Metekel Zone", "Mao Komo Special 
 
 // Fixed Credentials as requested
 const AUTHORIZED_ACCOUNTS: UserAccount[] = [
-  { username: 'police', phoneNumber: '0900000000', password: '1234', role: UserRole.LOCAL_POLICE, isVerified: true, isProfileComplete: false },
-  { username: 'reception', phoneNumber: '0911111111', password: '1234', role: UserRole.RECEPTION, isVerified: true, isProfileComplete: false }
+  { username: 'police', password: '1234', role: UserRole.LOCAL_POLICE, isVerified: true, isProfileComplete: false },
+  { username: 'reception', password: '1234', role: UserRole.RECEPTION, isVerified: true, isProfileComplete: false }
 ];
 
 // --- REFINED UI COMPONENTS (Moved outside for performance) ---
