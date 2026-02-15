@@ -7,14 +7,28 @@ export enum UserRole {
   SUPER_POLICE = 'SUPER_POLICE'
 }
 
+export interface UserAccount {
+  phoneNumber: string;
+  password: string;
+  username: string;
+  role: UserRole;
+  isProfileComplete: boolean;
+}
+
 export interface HotelProfile {
   id: string;
   name: string;
   address: string;
-  zone: string; // Zone or City Administration
+  zone: string;
   receptionistName: string;
   phoneNumber: string;
   digitalIdPhoto?: string;
+}
+
+export interface PoliceProfile {
+  name: string;
+  address: string;
+  zone: string;
 }
 
 export interface Guest {
@@ -48,6 +62,6 @@ export interface Notification {
   message: string;
   type: 'danger' | 'info' | 'success';
   timestamp: string;
-  targetZone?: string; // Routing to specific local police
+  targetZone?: string;
   guestId?: string;
 }
