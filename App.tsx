@@ -16,7 +16,6 @@ const LOGO_PATH = 'https://raw.githubusercontent.com/Anu-Anu/Begu-Engeda/main/lo
 const GOLDEN_GRADIENT = "text-transparent bg-clip-text bg-gradient-to-r from-amber-600 via-yellow-400 to-amber-700 font-black drop-shadow-sm";
 const ZONES = ["Assosa Zone", "Kamashi Zone", "Metekel Zone", "Mao Komo Special Woreda", "Assosa City Administration", "Gilgel Beles City Administration"];
 
-// Pre-defined Authorized Accounts (Simulated Database)
 const AUTHORIZED_ACCOUNTS: UserAccount[] = [
   { username: 'police', phoneNumber: 'admin', password: '1234', role: UserRole.LOCAL_POLICE, isVerified: true, isProfileComplete: false },
   { username: 'reception', phoneNumber: '0911000000', password: 'password', role: UserRole.RECEPTION, isVerified: true, isProfileComplete: false },
@@ -77,26 +76,19 @@ export default function App() {
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
     setIsSyncing(true);
-    
     setTimeout(() => {
       setIsSyncing(false);
-      // Check against pre-assigned accounts
       const acc = accounts.find(a => 
         (a.username === loginData.identifier || a.phoneNumber === loginData.identifier) && 
         a.password === loginData.password
       );
-
       if (acc) {
         setCurrentUser(acc);
-        if (!acc.isProfileComplete) {
-          setAuthState(acc.role === UserRole.RECEPTION ? 'setup_hotel' : 'setup_police');
-        } else {
-          setAuthState('authenticated');
-        }
+        setAuthState(!acc.isProfileComplete ? (acc.role === UserRole.RECEPTION ? 'setup_hotel' : 'setup_police') : 'authenticated');
       } else {
         alert(lang === 'am' ? "የተሳሳተ ተጠቃሚ ስም ወይም የይለፍ ቃል!" : "Invalid username or password!");
       }
-    }, 800);
+    }, 600);
   };
 
   const handleLogout = () => {
@@ -106,28 +98,13 @@ export default function App() {
     setLoginData({ identifier: '', password: '' });
   };
 
-  const handleHotelSetup = (e: React.FormEvent) => {
+  const handleSetupSubmit = (e: React.FormEvent, type: 'hotel' | 'police') => {
     e.preventDefault();
-    if (hotelProfile.name && hotelProfile.zone) {
-      if (currentUser) {
-        const updatedAcc = { ...currentUser, isProfileComplete: true };
-        const updatedAccounts = accounts.map(a => a.username === currentUser.username ? updatedAcc : a);
-        setAccounts(updatedAccounts);
-        setCurrentUser(updatedAcc);
-      }
-      setAuthState('authenticated');
-    } else alert(lang === 'am' ? "እባክዎን ሁሉንም መረጃዎች ይሙሉ!" : "Please fill all details.");
-  };
-
-  const handlePoliceSetup = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (policeProfile.name && policeProfile.zone) {
-      if (currentUser) {
-        const updatedAcc = { ...currentUser, isProfileComplete: true };
-        const updatedAccounts = accounts.map(a => a.username === currentUser.username ? updatedAcc : a);
-        setAccounts(updatedAccounts);
-        setCurrentUser(updatedAcc);
-      }
+    const isComplete = type === 'hotel' ? (hotelProfile.name && hotelProfile.zone) : (policeProfile.name && policeProfile.zone);
+    if (isComplete && currentUser) {
+      const updatedAcc = { ...currentUser, isProfileComplete: true };
+      setAccounts(accounts.map(a => a.username === currentUser.username ? updatedAcc : a));
+      setCurrentUser(updatedAcc);
       setAuthState('authenticated');
     } else alert(lang === 'am' ? "እባክዎን ሁሉንም መረጃዎች ይሙሉ!" : "Please fill all details.");
   };
@@ -165,32 +142,35 @@ export default function App() {
 
   const filteredGuests = useMemo(() => {
     let list = guests;
-    if (currentUser?.role === UserRole.LOCAL_POLICE && policeProfile.zone) {
-      list = guests.filter(g => g.hotelZone === policeProfile.zone);
-    } else if (currentUser?.role === UserRole.RECEPTION) {
-      list = guests.filter(g => g.hotelName === hotelProfile.name);
-    }
+    if (currentUser?.role === UserRole.LOCAL_POLICE) list = guests.filter(g => g.hotelZone === policeProfile.zone);
+    else if (currentUser?.role === UserRole.RECEPTION) list = guests.filter(g => g.hotelName === hotelProfile.name);
     return list.filter(g => g.fullName.toLowerCase().includes(searchTerm.toLowerCase()));
   }, [guests, currentUser, hotelProfile, policeProfile, searchTerm]);
 
-  // --- UI ATOMS ---
+  // --- UI COMPONENTS ---
 
-  const NavItem = ({ icon, label, active, onClick, count }: any) => (
-    <button onClick={onClick} className={`w-full flex items-center gap-4 px-5 py-4 rounded-2xl text-[11px] sm:text-xs font-black uppercase tracking-[1.5px] transition-all duration-300 group
-      ${active ? 'bg-amber-500 text-white shadow-2xl shadow-amber-500/20 translate-x-2' : 'text-slate-400 hover:bg-white/5 hover:text-white'}`}>
-      <span className={`${active ? 'scale-110' : 'group-hover:scale-110'} transition-transform`}>{icon}</span>
+  const NavButton = ({ icon, label, active, onClick, count }: any) => (
+    <button onClick={onClick} className={`w-full flex items-center gap-4 px-5 py-4 rounded-2xl text-[11px] sm:text-xs font-black uppercase tracking-[1px] transition-all duration-200 group active:scale-[0.96]
+      ${active ? 'bg-amber-500 text-white shadow-lg translate-x-1' : 'text-slate-400 hover:bg-white/5 hover:text-white'}`}>
+      <span>{icon}</span>
       <span className="flex-1 text-left truncate">{label}</span>
-      {count > 0 && <span className="bg-red-500 text-white text-[9px] px-2.5 py-1 rounded-full font-black shadow-lg ring-2 ring-[#0F172A]">{count}</span>}
+      {count > 0 && <span className="bg-red-500 text-white text-[9px] px-2 py-0.5 rounded-full font-black ring-2 ring-[#0F172A]">{count}</span>}
     </button>
   );
 
-  const FormInput = ({ label, value, onChange, type = "text", required, icon }: any) => (
-    <div className="space-y-2 w-full">
-      <label className="text-[10px] sm:text-[11px] font-black text-slate-400 uppercase tracking-[2px] ml-1">{label}</label>
+  const StandardInput = ({ label, value, onChange, type = "text", required, icon }: any) => (
+    <div className="space-y-1.5 w-full">
+      <label className="text-[10px] sm:text-[11px] font-bold text-slate-500 uppercase tracking-wider ml-1">{label}</label>
       <div className="relative group">
-        <div className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-amber-500 transition-colors duration-300">{icon}</div>
-        <input type={type} className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl pl-14 pr-6 py-4 text-sm font-bold focus:border-amber-400 outline-none transition-all shadow-inner" 
-          value={value} onChange={e => onChange(e.target.value)} required={required} />
+        <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-amber-500 transition-colors pointer-events-none">{icon}</div>
+        <input 
+          type={type} 
+          className="w-full bg-slate-50 border-2 border-slate-200 rounded-xl pl-12 pr-4 py-3.5 text-sm font-semibold text-slate-900 text-left placeholder:text-slate-300 focus:border-amber-400 focus:bg-white outline-none transition-all shadow-sm" 
+          value={value} 
+          onChange={e => onChange(e.target.value)} 
+          required={required}
+          autoComplete="off"
+        />
       </div>
     </div>
   );
@@ -199,72 +179,60 @@ export default function App() {
 
   if (authState !== 'authenticated') {
     return (
-      <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4 font-sans overflow-y-auto bg-[radial-gradient(circle_at_top_right,_var(--tw-gradient-stops))] from-slate-900 via-slate-950 to-black">
-        <div className="bg-white rounded-[3rem] shadow-[0_35px_60px_-15px_rgba(0,0,0,0.5)] p-8 sm:p-14 w-full max-w-md animate-in zoom-in-95 duration-500 relative overflow-hidden">
-          <div className="absolute top-0 right-0 w-32 h-32 bg-amber-500/5 -mr-16 -mt-16 rounded-full blur-3xl"></div>
-          
-          <img src={LOGO_PATH} className="w-24 h-24 mx-auto mb-6 drop-shadow-xl" onError={(e) => { e.currentTarget.src = "https://img.icons8.com/color/512/police-badge.png" }} />
-          <h1 className={`text-3xl sm:text-4xl text-center mb-2 ${GOLDEN_GRADIENT}`}>{t.appName}</h1>
-          <p className="text-[10px] font-black text-gray-400 text-center uppercase mb-10 tracking-[2px] opacity-80">{t.developedBy}</p>
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4 font-sans overflow-y-auto">
+        <div className="bg-white rounded-[2.5rem] shadow-2xl p-8 sm:p-12 w-full max-w-md animate-in zoom-in-95 duration-300">
+          <img src={LOGO_PATH} className="w-20 h-20 mx-auto mb-6" onError={(e) => { e.currentTarget.src = "https://img.icons8.com/color/512/police-badge.png" }} />
+          <h1 className={`text-3xl text-center mb-1 ${GOLDEN_GRADIENT}`}>{t.appName}</h1>
+          <p className="text-[10px] font-black text-gray-400 text-center uppercase mb-8 tracking-widest">{t.developedBy}</p>
           
           <div className="space-y-6">
             {authState === 'login' && (
-              <form onSubmit={handleLogin} className="space-y-5">
-                <FormInput label={t.username + " / " + t.phoneNumber} value={loginData.identifier} onChange={(v:any) => setLoginData({...loginData, identifier: v})} required icon={<UserCircle size={20}/>} />
-                <FormInput label={t.password} value={loginData.password} onChange={(v:any) => setLoginData({...loginData, password: v})} type="password" required icon={<Key size={20}/>} />
-                <button disabled={isSyncing} className="w-full bg-slate-900 hover:bg-slate-800 text-white font-black py-5 rounded-2xl shadow-2xl transition-all uppercase text-xs sm:text-sm tracking-[4px] mt-4 flex items-center justify-center gap-3 active:scale-95 disabled:opacity-70">
-                  {isSyncing ? <Activity size={20} className="animate-spin" /> : <ShieldCheck size={20} />}
+              <form onSubmit={handleLogin} className="space-y-4">
+                <StandardInput label={t.username + " / " + t.phoneNumber} value={loginData.identifier} onChange={(v:any) => setLoginData({...loginData, identifier: v})} required icon={<UserCircle size={18}/>} />
+                <StandardInput label={t.password} value={loginData.password} onChange={(v:any) => setLoginData({...loginData, password: v})} type="password" required icon={<Key size={18}/>} />
+                <button disabled={isSyncing} className="w-full bg-slate-900 hover:bg-slate-800 active:scale-[0.97] text-white font-black py-4 rounded-xl shadow-xl transition-all uppercase text-xs tracking-[2px] mt-4 flex items-center justify-center gap-3">
+                  {isSyncing ? <Activity size={18} className="animate-spin" /> : <ShieldCheck size={18} />}
                   {isSyncing ? "Verifying..." : t.login}
                 </button>
-                <div className="p-4 bg-slate-50 border border-slate-100 rounded-xl mt-6">
-                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest text-center leading-relaxed">
-                    Access restricted to authorized personnel. Please use credentials provided by the Police Commission.
-                  </p>
-                </div>
               </form>
             )}
 
             {authState === 'setup_hotel' && (
-              <form onSubmit={handleHotelSetup} className="space-y-5">
-                <div className="text-center mb-6">
-                  <h3 className="text-2xl font-black text-slate-800 uppercase tracking-tighter">{t.setupHotel}</h3>
-                  <p className="text-[10px] font-bold text-slate-400 mt-2 uppercase tracking-widest">Initial Property Registration</p>
-                </div>
-                <FormInput label={t.hotel} value={hotelProfile.name} onChange={(v:any) => setHotelProfile({...hotelProfile, name: v})} required icon={<Building2 size={20}/>} />
-                <FormInput label={t.hotelAddress} value={hotelProfile.address} onChange={(v:any) => setHotelProfile({...hotelProfile, address: v})} required icon={<MapPin size={20}/>} />
-                <div className="space-y-2">
-                  <label className="text-[11px] font-black text-slate-400 uppercase tracking-[3px] ml-1">{t.zone}</label>
-                  <select className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-6 py-4.5 font-bold text-sm outline-none focus:border-amber-400 shadow-inner appearance-none" value={hotelProfile.zone} onChange={e => setHotelProfile({...hotelProfile, zone: e.target.value})} required>
+              <form onSubmit={(e) => handleSetupSubmit(e, 'hotel')} className="space-y-4">
+                <h3 className="text-xl font-black text-slate-800 uppercase text-center mb-2">{t.setupHotel}</h3>
+                <StandardInput label={t.hotel} value={hotelProfile.name} onChange={(v:any) => setHotelProfile({...hotelProfile, name: v})} required icon={<Building2 size={18}/>} />
+                <StandardInput label={t.hotelAddress} value={hotelProfile.address} onChange={(v:any) => setHotelProfile({...hotelProfile, address: v})} required icon={<MapPin size={18}/>} />
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black text-slate-500 uppercase ml-1">{t.zone}</label>
+                  <select className="w-full bg-slate-50 border-2 border-slate-200 rounded-xl px-4 py-3.5 text-sm font-semibold outline-none focus:border-amber-400 appearance-none transition-all" value={hotelProfile.zone} onChange={e => setHotelProfile({...hotelProfile, zone: e.target.value})} required>
                     <option value="">Select Zone</option>
                     {ZONES.map(z => <option key={z} value={z}>{z}</option>)}
                   </select>
                 </div>
-                <button className="w-full bg-slate-900 text-white font-black py-5 rounded-2xl uppercase tracking-[4px] text-xs mt-6 shadow-2xl">{t.save} & {t.submit}</button>
+                <button className="w-full bg-slate-900 hover:bg-slate-800 active:scale-[0.97] text-white font-black py-4 rounded-xl uppercase tracking-widest text-xs mt-4 shadow-lg">{t.save} & {t.submit}</button>
               </form>
             )}
 
             {authState === 'setup_police' && (
-              <form onSubmit={handlePoliceSetup} className="space-y-5">
-                <div className="text-center mb-6">
-                  <h3 className="text-2xl font-black text-slate-800 uppercase tracking-tighter">{t.setupPolice}</h3>
-                </div>
-                <FormInput label={t.policeOfficeName} value={policeProfile.name} onChange={(v:any) => setPoliceProfile({...policeProfile, name: v})} required icon={<ShieldCheck size={20}/>} />
-                <FormInput label={t.location} value={policeProfile.address} onChange={(v:any) => setPoliceProfile({...policeProfile, address: v})} required icon={<MapPin size={20}/>} />
-                <div className="space-y-2">
-                  <label className="text-[11px] font-black text-slate-400 uppercase tracking-[3px] ml-1">{t.zone}</label>
-                  <select className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-6 py-4.5 font-bold text-sm outline-none focus:border-amber-400 shadow-inner appearance-none" value={policeProfile.zone} onChange={e => setPoliceProfile({...policeProfile, zone: e.target.value})} required>
+              <form onSubmit={(e) => handleSetupSubmit(e, 'police')} className="space-y-4">
+                <h3 className="text-xl font-black text-slate-800 uppercase text-center mb-2">{t.setupPolice}</h3>
+                <StandardInput label={t.policeOfficeName} value={policeProfile.name} onChange={(v:any) => setPoliceProfile({...policeProfile, name: v})} required icon={<ShieldCheck size={18}/>} />
+                <StandardInput label={t.location} value={policeProfile.address} onChange={(v:any) => setPoliceProfile({...policeProfile, address: v})} required icon={<MapPin size={18}/>} />
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black text-slate-500 uppercase ml-1">{t.zone}</label>
+                  <select className="w-full bg-slate-50 border-2 border-slate-200 rounded-xl px-4 py-3.5 text-sm font-semibold outline-none focus:border-amber-400 appearance-none transition-all" value={policeProfile.zone} onChange={e => setPoliceProfile({...policeProfile, zone: e.target.value})} required>
                     <option value="">Select Jurisdiction</option>
                     {ZONES.map(z => <option key={z} value={z}>{z}</option>)}
                   </select>
                 </div>
-                <button className="w-full bg-slate-900 text-white font-black py-5 rounded-2xl uppercase tracking-[4px] text-xs mt-6 shadow-2xl">{t.save}</button>
+                <button className="w-full bg-slate-900 hover:bg-slate-800 active:scale-[0.97] text-white font-black py-4 rounded-xl uppercase tracking-widest text-xs mt-4 shadow-lg">{t.save}</button>
               </form>
             )}
           </div>
 
-          <div className="mt-12 flex justify-center gap-6 pt-8 border-t border-slate-100">
-            <button onClick={() => setLang('am')} className={`px-5 py-2.5 rounded-xl text-[10px] font-black transition-all ${lang === 'am' ? 'bg-amber-500 text-white shadow-xl' : 'bg-slate-50 text-slate-400'}`}>አማርኛ</button>
-            <button onClick={() => setLang('en')} className={`px-5 py-2.5 rounded-xl text-[10px] font-black transition-all ${lang === 'en' ? 'bg-amber-500 text-white shadow-xl' : 'bg-slate-50 text-slate-400'}`}>ENGLISH</button>
+          <div className="mt-10 flex justify-center gap-4 pt-6 border-t border-slate-100">
+            <button onClick={() => setLang('am')} className={`px-4 py-2 rounded-lg text-[10px] font-black transition-all ${lang === 'am' ? 'bg-amber-500 text-white' : 'bg-slate-50 text-slate-400'}`}>አማርኛ</button>
+            <button onClick={() => setLang('en')} className={`px-4 py-2 rounded-lg text-[10px] font-black transition-all ${lang === 'en' ? 'bg-amber-500 text-white' : 'bg-slate-50 text-slate-400'}`}>ENGLISH</button>
           </div>
         </div>
       </div>
@@ -273,159 +241,135 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] flex flex-col md:flex-row font-sans text-slate-900 overflow-hidden">
-      {/* Mobile Sidebar Overlay */}
-      {isSidebarOpen && <div className="fixed inset-0 bg-slate-950/70 z-40 md:hidden backdrop-blur-sm" onClick={() => setIsSidebarOpen(false)} />}
+      {isSidebarOpen && <div className="fixed inset-0 bg-slate-950/70 z-40 md:hidden" onClick={() => setIsSidebarOpen(false)} />}
       
-      {/* Sidebar */}
-      <aside className={`fixed md:relative z-50 w-72 h-full bg-[#0F172A] text-white flex flex-col transition-all duration-500 no-print 
-        ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'} shadow-2xl`}>
-        <div className="p-10 border-b border-white/5 text-center flex flex-col items-center">
-          <img src={LOGO_PATH} className="w-20 h-20 mb-5 drop-shadow-2xl" onError={(e) => { e.currentTarget.src = "https://img.icons8.com/color/512/police-badge.png" }} />
-          <h2 className={`text-2xl leading-tight ${GOLDEN_GRADIENT}`}>{t.appName}</h2>
-          <p className="text-[10px] font-black text-slate-500 uppercase mt-3 tracking-[1.5px] opacity-70 leading-relaxed">{t.developedBy}</p>
+      <aside className={`fixed md:relative z-50 w-72 h-full bg-[#0F172A] text-white flex flex-col transition-all duration-300 
+        ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}>
+        <div className="p-10 border-b border-white/5 text-center">
+          <img src={LOGO_PATH} className="w-16 h-16 mx-auto mb-4" />
+          <h2 className={`text-xl font-bold ${GOLDEN_GRADIENT}`}>{t.appName}</h2>
         </div>
-        
-        <nav className="flex-1 p-6 space-y-2 overflow-y-auto custom-scrollbar">
-          <NavItem icon={<LayoutDashboard size={20}/>} label={t.dashboard} active={view === 'dashboard'} onClick={() => {setView('dashboard'); setIsSidebarOpen(false);}} />
+        <nav className="flex-1 p-5 space-y-1.5 overflow-y-auto">
+          <NavButton icon={<LayoutDashboard size={18}/>} label={t.dashboard} active={view === 'dashboard'} onClick={() => {setView('dashboard'); setIsSidebarOpen(false);}} />
           {currentUser?.role === UserRole.RECEPTION && (
             <>
-              <NavItem icon={<UserPlus size={20}/>} label={t.registerGuest} active={view === 'registerGuest'} onClick={() => {setView('registerGuest'); setIsSidebarOpen(false);}} />
-              <NavItem icon={<Users size={20}/>} label={t.guestList} active={view === 'guestList'} onClick={() => {setView('guestList'); setIsSidebarOpen(false);}} />
+              <NavButton icon={<UserPlus size={18}/>} label={t.registerGuest} active={view === 'registerGuest'} onClick={() => {setView('registerGuest'); setIsSidebarOpen(false);}} />
+              <NavButton icon={<Users size={18}/>} label={t.guestList} active={view === 'guestList'} onClick={() => {setView('guestList'); setIsSidebarOpen(false);}} />
             </>
           )}
           {(currentUser?.role === UserRole.LOCAL_POLICE || currentUser?.role === UserRole.SUPER_POLICE) && (
             <>
-              <NavItem icon={<AlertTriangle size={20}/>} label={t.wantedPersons} active={view === 'addWanted'} onClick={() => {setView('addWanted'); setIsSidebarOpen(false);}} />
-              <NavItem icon={<Users size={20}/>} label={t.guestList} active={view === 'guestList'} onClick={() => {setView('guestList'); setIsSidebarOpen(false);}} />
+              <NavButton icon={<AlertTriangle size={18}/>} label={t.wantedPersons} active={view === 'addWanted'} onClick={() => {setView('addWanted'); setIsSidebarOpen(false);}} />
+              <NavButton icon={<Users size={18}/>} label={t.guestList} active={view === 'guestList'} onClick={() => {setView('guestList'); setIsSidebarOpen(false);}} />
             </>
           )}
-          <NavItem icon={<Bell size={20}/>} label={t.notifications} active={view === 'notifications'} count={notifications.length} onClick={() => {setView('notifications'); setIsSidebarOpen(false);}} />
-          <NavItem icon={<Info size={20}/>} label={t.appUtility} active={view === 'utility'} onClick={() => {setView('utility'); setIsSidebarOpen(false);}} />
-          <NavItem icon={<Settings size={20}/>} label={t.settings} active={view === 'settings'} onClick={() => {setView('settings'); setIsSidebarOpen(false);}} />
+          <NavButton icon={<Bell size={18}/>} label={t.notifications} active={view === 'notifications'} count={notifications.length} onClick={() => {setView('notifications'); setIsSidebarOpen(false);}} />
+          <NavButton icon={<Info size={18}/>} label={t.appUtility} active={view === 'utility'} onClick={() => {setView('utility'); setIsSidebarOpen(false);}} />
+          <NavButton icon={<Settings size={18}/>} label={t.settings} active={view === 'settings'} onClick={() => {setView('settings'); setIsSidebarOpen(false);}} />
         </nav>
-
-        <div className="p-8 bg-slate-950/60 border-t border-white/5">
-          <button onClick={handleLogout} className="flex items-center justify-center gap-4 w-full py-4.5 bg-red-600/10 hover:bg-red-600 text-red-500 hover:text-white rounded-2xl text-[11px] font-black uppercase transition-all shadow-xl active:scale-95">
-            <LogOut size={18}/> {t.logout}
+        <div className="p-6 border-t border-white/5">
+          <button onClick={handleLogout} className="flex items-center justify-center gap-3 w-full py-3.5 bg-red-600/10 hover:bg-red-600 text-red-500 hover:text-white rounded-xl text-[11px] font-black uppercase transition-all active:scale-[0.97]">
+            <LogOut size={16}/> {t.logout}
           </button>
         </div>
       </aside>
 
-      {/* Main Area */}
       <div className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden">
-        <header className="bg-white border-b px-6 sm:px-12 py-5 flex justify-between items-center shadow-sm z-30">
-          <div className="flex items-center gap-5">
-             <button className="md:hidden p-3 bg-slate-50 text-slate-600 rounded-2xl active:bg-slate-200" onClick={() => setIsSidebarOpen(true)}><Menu size={24}/></button>
-             <div className="leading-none">
-               <h3 className="font-black text-slate-900 uppercase text-sm sm:text-xl tracking-tighter">{t[view] || view}</h3>
-               <p className="text-[10px] text-slate-400 font-bold uppercase mt-1.5 tracking-widest hidden sm:block opacity-60">
-                 {currentUser?.role === UserRole.RECEPTION ? hotelProfile.name : policeProfile.name || "Regional Feed"}
-               </p>
-             </div>
+        <header className="bg-white border-b px-6 py-4 flex justify-between items-center shadow-sm z-30">
+          <div className="flex items-center gap-4">
+             <button className="md:hidden p-2 text-slate-600 active:bg-slate-100 rounded-lg" onClick={() => setIsSidebarOpen(true)}><Menu size={22}/></button>
+             <h3 className="font-black text-slate-800 uppercase text-xs sm:text-lg">{t[view] || view}</h3>
           </div>
-          <div className="flex items-center gap-4 sm:gap-8">
-             <div className="hidden sm:flex items-center gap-3 text-[10px] font-black text-emerald-500 uppercase tracking-widest bg-emerald-50 px-4 py-2 rounded-full border border-emerald-100">
-               <Cloud size={14} /> Encrypted Session
-             </div>
-             <button onClick={() => setLang(lang === 'am' ? 'en' : 'am')} className="p-3 bg-slate-50 border border-slate-100 rounded-2xl hover:bg-amber-50 transition-all shadow-sm"><Globe size={20} className="text-amber-600" /></button>
-             <div className="flex items-center gap-3 sm:gap-4 px-4 py-2 bg-slate-50 border border-slate-100 rounded-2xl">
-                <div className="text-right leading-none hidden xs:block">
-                   <p className="text-xs font-black text-slate-900 uppercase truncate max-w-[120px]">{currentUser?.username}</p>
-                   <p className="text-[9px] text-amber-600 font-black uppercase mt-1 tracking-tighter opacity-70">{currentUser?.role}</p>
+          <div className="flex items-center gap-4">
+             <button onClick={() => setLang(lang === 'am' ? 'en' : 'am')} className="p-2.5 bg-slate-50 border rounded-xl hover:bg-slate-100 active:scale-95 transition-all"><Globe size={18} className="text-amber-600" /></button>
+             <div className="flex items-center gap-3 px-3 py-1.5 bg-slate-50 border rounded-xl">
+                <div className="text-right hidden sm:block">
+                   <p className="text-[10px] font-black text-slate-900 uppercase truncate max-w-[100px]">{currentUser?.username}</p>
+                   <p className="text-[8px] text-amber-600 font-bold uppercase tracking-tighter">{currentUser?.role}</p>
                 </div>
-                <div className="w-10 h-10 sm:w-11 sm:h-11 bg-slate-900 rounded-2xl flex items-center justify-center text-white font-black shadow-lg border-2 border-white text-sm">{currentUser?.username[0].toUpperCase()}</div>
+                <div className="w-8 h-8 bg-slate-900 rounded-lg flex items-center justify-center text-white font-black text-xs">{currentUser?.username[0].toUpperCase()}</div>
              </div>
           </div>
         </header>
 
-        <main className="flex-1 overflow-y-auto p-5 sm:p-12 custom-scrollbar scroll-smooth">
+        <main className="flex-1 overflow-y-auto p-5 sm:p-10 custom-scrollbar">
           {zoomImg && (
-            <div className="fixed inset-0 bg-slate-950/98 z-[100] flex items-center justify-center p-6 sm:p-20" onClick={() => setZoomImg(null)}>
-              <div className="relative max-w-5xl w-full animate-in zoom-in-95 duration-300">
-                <button className="absolute -top-16 right-0 text-white bg-white/10 p-5 rounded-full hover:bg-white/20 transition-all border border-white/10"><X size={32}/></button>
-                <img src={zoomImg} className="w-full h-auto max-h-[85vh] rounded-[3rem] shadow-2xl object-contain ring-4 ring-white/10" />
+            <div className="fixed inset-0 bg-slate-950/95 z-[100] flex items-center justify-center p-6" onClick={() => setZoomImg(null)}>
+              <div className="relative max-w-4xl w-full">
+                <button className="absolute -top-12 right-0 text-white p-2 hover:bg-white/10 rounded-full"><X size={24}/></button>
+                <img src={zoomImg} className="w-full h-auto max-h-[85vh] rounded-2xl shadow-2xl object-contain border border-white/20" />
               </div>
             </div>
           )}
 
-          <div className="max-w-7xl mx-auto space-y-8 sm:space-y-12 animate-in fade-in duration-1000">
-            {view === 'dashboard' && <DashboardView user={currentUser} t={t} guests={filteredGuests} notifications={notifications} wanted={wanted} setView={setView} />}
+          <div className="max-w-6xl mx-auto space-y-8">
+            {view === 'dashboard' && <Dashboard user={currentUser} t={t} guests={filteredGuests} notifications={notifications} wanted={wanted} setView={setView} />}
             {view === 'registerGuest' && <GuestEntryForm newGuest={newGuest} setNewGuest={setNewGuest} onSubmit={saveGuest} t={t} />}
             
             {(view === 'guestList' || view === 'reports') && (
-              <div className="space-y-8">
-                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-6 no-print">
-                   <div className="relative w-full max-w-lg group">
-                     <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-amber-500 transition-colors" size={20}/>
-                     <input type="text" placeholder={t.searchPlaceholder} className="w-full bg-white border-2 border-slate-100 rounded-[1.5rem] pl-16 pr-8 py-5 outline-none focus:border-amber-400 font-bold text-base shadow-xl shadow-slate-200/50 transition-all" 
+              <div className="space-y-6">
+                <div className="flex flex-col sm:flex-row gap-4 justify-between items-center no-print">
+                   <div className="relative w-full max-w-md">
+                     <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={18}/>
+                     <input type="text" placeholder={t.searchPlaceholder} className="w-full bg-white border-2 border-slate-100 rounded-xl pl-12 pr-4 py-3 outline-none focus:border-amber-400 font-semibold text-sm shadow-sm transition-all text-left" 
                        value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
                    </div>
-                   <div className="flex gap-3 w-full sm:w-auto">
-                      <button onClick={() => window.print()} className="flex-1 sm:flex-none flex items-center justify-center gap-3 px-8 py-5 bg-white border-2 border-slate-100 rounded-2xl hover:bg-slate-50 transition-all font-black uppercase text-[10px] tracking-widest shadow-xl"><Printer size={18}/> {t.print}</button>
-                      <button className="flex-1 sm:flex-none flex items-center justify-center gap-3 px-8 py-5 bg-slate-900 text-white rounded-2xl hover:bg-slate-800 transition-all font-black uppercase text-[10px] tracking-widest shadow-2xl shadow-slate-900/20"><Download size={18}/> {t.download}</button>
+                   <div className="flex gap-2 w-full sm:w-auto">
+                      <button onClick={() => window.print()} className="flex-1 px-5 py-3 bg-white border rounded-xl hover:bg-slate-50 font-bold uppercase text-[10px] tracking-widest active:scale-95 transition-all"><Printer size={16} className="inline mr-2"/> {t.print}</button>
+                      <button className="flex-1 px-5 py-3 bg-slate-900 text-white rounded-xl hover:bg-slate-800 font-bold uppercase text-[10px] tracking-widest active:scale-95 transition-all"><Download size={16} className="inline mr-2"/> {t.download}</button>
                    </div>
                 </div>
 
-                <div className="bg-white rounded-[3rem] shadow-[0_20px_50px_rgba(0,0,0,0.05)] border border-slate-100 overflow-hidden">
-                  <div className="p-10 border-b bg-slate-50/50">
-                    <h3 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tighter uppercase">{t.fullTableRecord}</h3>
-                    <p className="text-[10px] sm:text-[11px] font-black text-slate-400 uppercase tracking-[4px] mt-3 opacity-70">Benishangul Regional Intelligence Log</p>
+                <div className="bg-white rounded-3xl shadow-xl border border-slate-100 overflow-hidden">
+                  <div className="p-8 border-b bg-slate-50/50">
+                    <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">{t.fullTableRecord}</h3>
+                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">Official Judicial Surveillance Log</p>
                   </div>
-                  <div className="overflow-x-auto custom-scrollbar">
+                  <div className="overflow-x-auto">
                     <table className="w-full text-left whitespace-nowrap">
-                      <thead className="bg-slate-50/80 text-[11px] sm:text-[12px] font-black uppercase text-slate-400 tracking-[3px] border-b border-slate-100">
+                      <thead className="bg-slate-50 text-[10px] font-black uppercase text-slate-500 tracking-wider">
                         <tr>
-                          <th className="px-12 py-10">Identification</th>
-                          <th className="px-12 py-10">Guest Name</th>
-                          <th className="px-12 py-10">Bed ID</th>
-                          <th className="px-12 py-10">Property Feed</th>
-                          <th className="px-12 py-10">Officer</th>
-                          <th className="px-12 py-10 text-center">Protocol</th>
+                          <th className="px-10 py-6">ID Evidence</th>
+                          <th className="px-10 py-6">Guest Name</th>
+                          <th className="px-10 py-6">Bed ID</th>
+                          <th className="px-10 py-6">Property Feed</th>
+                          <th className="px-10 py-6 text-center">Status</th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-slate-100 text-sm font-bold uppercase text-slate-700">
+                      <tbody className="divide-y divide-slate-100 text-sm font-semibold text-slate-700">
                         {filteredGuests.map((g: any) => (
-                          <tr key={g.id} className="hover:bg-indigo-50/40 transition-all duration-500 group">
-                            <td className="px-12 py-8">
-                              <div className="w-20 h-32 rounded-2xl overflow-hidden shadow-2xl ring-4 ring-white border border-slate-100 transform group-hover:scale-105 transition-transform cursor-zoom-in relative" onClick={() => setZoomImg(g.idPhoto)}>
+                          <tr key={g.id} className="hover:bg-slate-50/50 transition-all duration-200">
+                            <td className="px-10 py-6">
+                              <div className="w-16 h-24 rounded-xl overflow-hidden shadow-lg border border-slate-200 cursor-zoom-in" onClick={() => setZoomImg(g.idPhoto)}>
                                 <img src={g.idPhoto} className="w-full h-full object-cover" />
                               </div>
                             </td>
-                            <td className="px-12 py-8">
-                              <p className="font-black text-slate-900 text-xl tracking-tighter mb-2">{g.fullName}</p>
-                              <div className="flex items-center gap-3 text-slate-400 text-[11px] font-black tracking-widest">
-                                <Globe size={16}/> {g.nationality} • {g.checkInDate}
+                            <td className="px-10 py-6">
+                              <p className="font-black text-slate-900 text-base mb-1">{g.fullName}</p>
+                              <div className="flex items-center gap-2 text-slate-400 text-[10px] font-bold">
+                                <Globe size={14}/> {g.nationality} • {g.checkInDate}
                               </div>
                             </td>
-                            <td className="px-12 py-8">
-                              <span className="inline-block px-8 py-4 bg-white rounded-2xl text-slate-900 font-black border-2 border-slate-100 shadow-xl text-xl">#{g.roomNumber}</span>
+                            <td className="px-10 py-6">
+                              <span className="px-4 py-2 bg-slate-100 rounded-lg text-slate-900 font-black border border-slate-200 text-base">#{g.roomNumber}</span>
                             </td>
-                            <td className="px-12 py-8 leading-relaxed">
-                              <p className="text-slate-900 text-lg font-black tracking-tight">{g.hotelName}</p>
-                              <p className="text-[11px] text-slate-500 mt-2 font-black italic uppercase tracking-widest opacity-60">{g.hotelAddress} | {g.hotelZone}</p>
+                            <td className="px-10 py-6">
+                              <p className="text-slate-900 font-bold">{g.hotelName}</p>
+                              <p className="text-[10px] text-slate-400 mt-1 uppercase tracking-tighter">{g.hotelZone}</p>
                             </td>
-                            <td className="px-12 py-8">
-                              <p className="text-slate-800 text-sm font-black">{g.receptionistName}</p>
-                              <div className="flex items-center gap-2 text-[11px] text-indigo-600 font-black mt-4 bg-indigo-50/50 px-4 py-1.5 rounded-full inline-block border border-indigo-100">
-                                <Phone size={14}/> {g.receptionistPhone}
-                              </div>
-                            </td>
-                            <td className="px-12 py-8 text-center">
+                            <td className="px-10 py-6 text-center">
                               {g.isWanted ? (
-                                <span className="inline-flex items-center gap-3 px-8 py-4 bg-red-600 text-white rounded-full text-[11px] font-black shadow-xl animate-pulse border-4 border-white">
-                                  <AlertTriangle size={18}/> INTERCEPT
+                                <span className="inline-flex items-center gap-2 px-6 py-3 bg-red-600 text-white rounded-full text-[10px] font-black shadow-lg animate-pulse">
+                                  <AlertTriangle size={14}/> WANTED
                                 </span>
                               ) : (
-                                <span className="inline-flex items-center gap-3 px-8 py-4 bg-emerald-500 text-white rounded-full text-[11px] font-black shadow-lg border-4 border-white">
-                                  <CheckCircle2 size={18}/> SECURE
+                                <span className="inline-flex items-center gap-2 px-6 py-3 bg-emerald-500 text-white rounded-full text-[10px] font-black shadow-md">
+                                  <CheckCircle2 size={14}/> CLEAR
                                 </span>
                               )}
                             </td>
                           </tr>
                         ))}
-                        {filteredGuests.length === 0 && (
-                          <tr><td colSpan={6} className="p-60 text-center text-slate-300 font-black tracking-[15px] uppercase opacity-20">No Intelligence Records Found</td></tr>
-                        )}
                       </tbody>
                     </table>
                   </div>
@@ -437,20 +381,16 @@ export default function App() {
             {view === 'notifications' && <NotificationsFeed notifications={notifications} t={t} setView={setView} />}
             
             {view === 'settings' && (
-              <div className="max-w-xl mx-auto bg-white p-12 sm:p-16 rounded-[3.5rem] shadow-2xl border border-slate-100">
-                <h3 className="text-2xl font-black mb-10 uppercase tracking-tighter text-center">{t.settings}</h3>
-                <div className="space-y-8">
-                  <div className="p-8 bg-slate-50 rounded-3xl border-2 border-slate-100 space-y-6">
-                    <div className="flex items-center gap-5">
-                       <div className="w-16 h-16 bg-slate-900 text-white rounded-2xl flex items-center justify-center font-black text-xl shadow-xl">{currentUser?.username[0].toUpperCase()}</div>
-                       <div>
-                         <p className="text-[10px] font-black text-slate-400 uppercase tracking-[3px] mb-1">Active Officer Feed</p>
-                         <p className="font-black text-slate-900 text-lg">{currentUser?.username}</p>
-                       </div>
-                    </div>
+              <div className="max-w-xl mx-auto bg-white p-12 rounded-[2.5rem] shadow-xl border border-slate-100">
+                <h3 className="text-xl font-black mb-8 uppercase text-center">{t.settings}</h3>
+                <div className="space-y-6">
+                  <div className="p-6 bg-slate-50 rounded-2xl border border-slate-200">
+                    <p className="text-[10px] font-black text-slate-400 uppercase mb-2">Active Session</p>
+                    <p className="font-black text-slate-900 text-lg">{currentUser?.username}</p>
+                    <p className="text-xs text-slate-500 mt-1">{currentUser?.role}</p>
                   </div>
-                  <button onClick={() => alert("Settings synced!")} className="w-full py-6 bg-slate-900 hover:bg-slate-800 text-white font-black rounded-[2rem] shadow-2xl transition-all uppercase tracking-[4px] text-sm flex items-center justify-center gap-4">
-                    <Save size={20}/> {t.save} Changes
+                  <button onClick={() => alert("Settings saved!")} className="w-full py-4 bg-slate-900 hover:bg-slate-800 active:scale-[0.97] text-white font-black rounded-xl shadow-lg transition-all uppercase tracking-[2px] text-xs flex items-center justify-center gap-3">
+                    <Save size={18}/> Sync Data
                   </button>
                 </div>
               </div>
@@ -462,63 +402,61 @@ export default function App() {
   );
 }
 
-function DashboardView({ t, guests, notifications, wanted, setView, user }: any) {
+function Dashboard({ t, guests, notifications, wanted, setView }: any) {
   const stats = [
-    { l: t.guestList, v: guests.length, c: 'bg-indigo-600', icon: <Users size={28}/> },
-    { l: t.wantedPersons, v: wanted.length, c: 'bg-red-600', icon: <AlertTriangle size={28}/> },
-    { l: t.notifications, v: notifications.length, c: 'bg-amber-600', icon: <Bell size={28}/> }
+    { l: t.guestList, v: guests.length, c: 'bg-indigo-600', icon: <Users size={24}/> },
+    { l: t.wantedPersons, v: wanted.length, c: 'bg-red-600', icon: <AlertTriangle size={24}/> },
+    { l: t.notifications, v: notifications.length, c: 'bg-amber-600', icon: <Bell size={24}/> }
   ];
   return (
-    <div className="space-y-12">
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8 sm:gap-12">
+    <div className="space-y-8">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
         {stats.map(s => (
-          <div key={s.l} className="bg-white p-10 sm:p-12 rounded-[3.5rem] shadow-xl border border-slate-100 flex items-center justify-between group active:scale-[0.98] transition-all cursor-pointer overflow-hidden relative" 
+          <div key={s.l} className="bg-white p-8 rounded-[2rem] shadow-xl border border-slate-100 flex items-center justify-between group active:scale-[0.98] transition-all cursor-pointer overflow-hidden relative" 
             onClick={() => setView(s.l === t.guestList ? 'guestList' : s.l === t.wantedPersons ? 'wantedPersons' : 'notifications')}>
-            <div className={`absolute top-0 right-0 w-40 h-40 ${s.c} opacity-[0.05] rounded-bl-[6rem] group-hover:scale-125 transition-transform duration-700`}></div>
             <div className="relative z-10">
-              <p className="text-[11px] font-black text-slate-400 uppercase tracking-[4px] mb-3 opacity-60">{s.l}</p>
-              <p className="text-5xl sm:text-6xl font-black text-slate-900 tracking-tighter">{s.v}</p>
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">{s.l}</p>
+              <p className="text-4xl font-black text-slate-900">{s.v}</p>
             </div>
-            <div className={`${s.c} w-16 h-16 sm:w-20 sm:h-20 rounded-[1.75rem] flex items-center justify-center text-white shadow-2xl transition-all duration-500 group-hover:rotate-12`}>
+            <div className={`${s.c} w-14 h-14 rounded-2xl flex items-center justify-center text-white shadow-xl transition-all group-hover:rotate-12`}>
               {s.icon}
             </div>
           </div>
         ))}
       </div>
       
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
-        <div className="bg-white p-10 sm:p-12 rounded-[4rem] shadow-2xl border border-slate-100 h-[450px] flex flex-col">
-          <h4 className="font-black text-slate-900 uppercase mb-10 text-[11px] tracking-[5px] flex items-center gap-5 opacity-80">
-            <TrendingUp size={24} className="text-indigo-600"/> Surveillance Trend Analysis
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <div className="bg-white p-8 rounded-[2.5rem] shadow-xl border border-slate-100 h-[380px] flex flex-col">
+          <h4 className="font-black text-slate-900 uppercase mb-8 text-[10px] tracking-widest flex items-center gap-3">
+            <TrendingUp size={18} className="text-indigo-600"/> Surveillance Trend
           </h4>
           <div className="flex-1">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={[{n:'Weekly', v:guests.length},{n:'Regional', v:12},{n:'Alerts', v:notifications.length}]}>
+              <BarChart data={[{n:'Weekly', v:guests.length},{n:'Alerts', v:notifications.length}]}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                <XAxis dataKey="n" axisLine={false} tickLine={false} tick={{fontSize: 11, fontWeight: 900, fill: '#64748b'}} dy={15} />
-                <YAxis axisLine={false} tickLine={false} tick={{fontSize: 11, fontWeight: 900, fill: '#64748b'}} />
-                <Tooltip cursor={{fill: '#f8fafc'}} contentStyle={{borderRadius: '25px', border: 'none', boxShadow: '0 30px 60px rgba(0,0,0,0.1)', padding: '20px'}} />
-                <Bar dataKey="v" fill="#4f46e5" radius={[15, 15, 0, 0]} barSize={50} />
+                <XAxis dataKey="n" axisLine={false} tickLine={false} tick={{fontSize: 10, fontWeight: 700}} />
+                <YAxis axisLine={false} tickLine={false} tick={{fontSize: 10, fontWeight: 700}} />
+                <Tooltip cursor={{fill: '#f8fafc'}} contentStyle={{borderRadius: '15px', border: 'none', boxShadow: '0 10px 30px rgba(0,0,0,0.05)'}} />
+                <Bar dataKey="v" fill="#4f46e5" radius={[10, 10, 0, 0]} barSize={40} />
               </BarChart>
             </ResponsiveContainer>
           </div>
         </div>
-        <div className="bg-white p-10 sm:p-12 rounded-[4rem] shadow-2xl border border-slate-100 flex flex-col h-[450px]">
-          <h4 className="font-black text-slate-900 uppercase mb-10 text-[11px] tracking-[5px] flex items-center gap-5 opacity-80">
-            <Activity size={24} className="text-emerald-500"/> Live Activity Feed
+        <div className="bg-white p-8 rounded-[2.5rem] shadow-xl border border-slate-100 flex flex-col h-[380px]">
+          <h4 className="font-black text-slate-900 uppercase mb-8 text-[10px] tracking-widest flex items-center gap-3">
+            <Activity size={18} className="text-emerald-500"/> Live Feed
           </h4>
-          <div className="flex-1 overflow-y-auto custom-scrollbar pr-2">
-            <table className="w-full text-left text-[11px] font-black uppercase tracking-tight">
-              <thead className="bg-slate-50 text-slate-400 sticky top-0 rounded-xl overflow-hidden">
-                <tr><th className="p-4 rounded-l-xl">Identification</th><th className="p-4">Jurisdiction</th><th className="p-4 text-center rounded-r-xl">Protocol</th></tr>
+          <div className="flex-1 overflow-y-auto custom-scrollbar">
+            <table className="w-full text-left text-[11px] font-bold uppercase">
+              <thead className="bg-slate-50 text-slate-400 sticky top-0">
+                <tr><th className="p-3">Guest Name</th><th className="p-3">Protocol</th></tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {guests.slice(0, 15).map(g => (
-                  <tr key={g.id} className="hover:bg-indigo-50/50 transition-colors duration-300">
-                    <td className="p-4 uppercase text-slate-800 truncate max-w-[120px]">{g.fullName}</td>
-                    <td className="p-4 uppercase text-slate-400 font-bold opacity-60 truncate max-w-[100px]">{g.hotelZone}</td>
-                    <td className="p-4 text-center">
-                      {g.isWanted ? <span className="text-red-600 font-black tracking-widest">WANTED</span> : <span className="text-emerald-600 font-black tracking-widest">CLEAR</span>}
+                {guests.slice(0, 10).map(g => (
+                  <tr key={g.id} className="hover:bg-slate-50 transition-colors">
+                    <td className="p-3 text-slate-800 font-black">{g.fullName}</td>
+                    <td className="p-3">
+                      {g.isWanted ? <span className="text-red-600">ALERT</span> : <span className="text-emerald-600">SECURE</span>}
                     </td>
                   </tr>
                 ))}
@@ -540,32 +478,48 @@ function GuestEntryForm({ onSubmit, newGuest, setNewGuest, t }: any) {
       reader.readAsDataURL(file);
     }
   };
+
+  const GroupInput = ({ label, value, onChange, type = "text", required, icon }: any) => (
+    <div className="space-y-1.5 w-full">
+      <label className="text-[10px] sm:text-[11px] font-bold text-slate-500 uppercase tracking-widest ml-1">{label}</label>
+      <div className="relative group">
+        <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-amber-500 transition-colors pointer-events-none">{icon}</div>
+        <input 
+          type={type} 
+          className="w-full bg-slate-50 border-2 border-slate-200 rounded-xl pl-12 pr-4 py-3.5 text-sm font-semibold text-slate-900 text-left focus:border-amber-400 focus:bg-white outline-none transition-all" 
+          value={value} 
+          onChange={e => onChange(e.target.value)} 
+          required={required} 
+          autoComplete="off"
+        />
+      </div>
+    </div>
+  );
+
   return (
-    <div className="max-w-3xl mx-auto bg-white p-10 sm:p-16 rounded-[4rem] shadow-2xl border border-slate-100 animate-in zoom-in-95 duration-500">
-      <h3 className="text-3xl sm:text-4xl font-black mb-12 flex items-center gap-6 uppercase tracking-tighter tracking-[4px]"><UserPlus size={44} className="text-indigo-600" /> {t.registerGuest}</h3>
-      <form onSubmit={onSubmit} className="space-y-8 sm:space-y-10">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 sm:gap-10">
-          <InputWrapper label={t.fullName} value={newGuest.fullName} onChange={(v: string) => setNewGuest({...newGuest, fullName: v})} required icon={<Users size={22}/>} />
-          <InputWrapper label={t.nationality} value={newGuest.nationality} onChange={(v: string) => setNewGuest({...newGuest, nationality: v})} required icon={<Globe size={22}/>} />
+    <div className="max-w-2xl mx-auto bg-white p-8 sm:p-14 rounded-[3rem] shadow-2xl border border-slate-100">
+      <h3 className="text-2xl font-black mb-10 flex items-center gap-4 uppercase tracking-tighter"><UserPlus size={32} className="text-indigo-600" /> {t.registerGuest}</h3>
+      <form onSubmit={onSubmit} className="space-y-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <GroupInput label={t.fullName} value={newGuest.fullName} onChange={(v: string) => setNewGuest({...newGuest, fullName: v})} required icon={<Users size={20}/>} />
+          <GroupInput label={t.nationality} value={newGuest.nationality} onChange={(v: string) => setNewGuest({...newGuest, nationality: v})} required icon={<Globe size={20}/>} />
         </div>
-        <InputWrapper label={t.roomNumber} value={newGuest.roomNumber} onChange={(v: string) => setNewGuest({...newGuest, roomNumber: v})} required icon={<Plus size={22}/>} />
-        <div className="space-y-4">
-          <label className="text-[11px] font-black text-slate-400 uppercase tracking-[4px] ml-1">{t.idPhoto}</label>
-          <div className="p-16 sm:p-24 bg-slate-50/50 border-4 border-dashed border-slate-100 rounded-[3.5rem] text-center cursor-pointer hover:bg-slate-50 hover:border-indigo-400 transition-all duration-500 group relative overflow-hidden" onClick={() => document.getElementById('idUpload')?.click()}>
-            <div className="flex flex-col items-center relative z-10">
-              <div className="w-20 h-20 bg-white rounded-3xl flex items-center justify-center shadow-2xl mb-6 text-slate-200 group-hover:text-indigo-600 group-hover:scale-110 transition-all border-4 border-white"><Camera size={40}/></div>
-              <p className="text-[12px] font-black uppercase text-slate-300 tracking-[8px] group-hover:text-indigo-900 transition-colors">{t.capturePhoto}</p>
-              <input type="file" id="idUpload" className="hidden" onChange={handleFileUpload} capture="environment" />
-            </div>
+        <GroupInput label={t.roomNumber} value={newGuest.roomNumber} onChange={(v: string) => setNewGuest({...newGuest, roomNumber: v})} required icon={<Plus size={20}/>} />
+        <div className="space-y-3">
+          <label className="text-[10px] font-black text-slate-500 uppercase ml-1">{t.idPhoto}</label>
+          <div className="p-12 bg-slate-50 border-4 border-dashed border-slate-200 rounded-[2rem] text-center cursor-pointer hover:bg-white hover:border-indigo-400 active:scale-[0.99] transition-all group" onClick={() => document.getElementById('idUpload')?.click()}>
+            <Camera size={36} className="mx-auto mb-4 text-slate-300 group-hover:text-indigo-500 transition-colors" />
+            <p className="text-[11px] font-black uppercase text-slate-400 tracking-widest">{t.capturePhoto}</p>
+            <input type="file" id="idUpload" className="hidden" onChange={handleFileUpload} capture="environment" />
           </div>
         </div>
         {newGuest.idPhoto && (
-          <div className="relative w-48 h-64 sm:w-56 sm:h-72 mx-auto animate-in zoom-in-95 duration-500 group">
-            <img src={newGuest.idPhoto} className="w-full h-full object-cover rounded-[2.5rem] shadow-2xl ring-8 ring-white border-2 border-slate-100" />
-            <button type="button" onClick={() => setNewGuest({...newGuest, idPhoto: ''})} className="absolute -top-5 -right-5 bg-red-600 text-white p-3.5 rounded-full shadow-2xl border-4 border-white transform group-hover:scale-110 transition-all active:scale-90"><X size={20}/></button>
+          <div className="relative w-40 h-56 mx-auto">
+            <img src={newGuest.idPhoto} className="w-full h-full object-cover rounded-2xl shadow-xl ring-4 ring-white border" />
+            <button type="button" onClick={() => setNewGuest({...newGuest, idPhoto: ''})} className="absolute -top-3 -right-3 bg-red-600 text-white p-2 rounded-full shadow-lg border-2 border-white active:scale-90 transition-all"><X size={16}/></button>
           </div>
         )}
-        <button className="w-full bg-slate-900 hover:bg-indigo-800 text-white font-black py-7 sm:py-8 rounded-[2.5rem] shadow-2xl transition-all uppercase text-lg sm:text-2xl tracking-[8px] mt-8 active:scale-[0.98]">
+        <button className="w-full bg-slate-900 hover:bg-slate-800 active:scale-[0.98] text-white font-black py-5 rounded-2xl shadow-xl transition-all uppercase text-sm tracking-widest mt-6">
            {t.submit}
         </button>
       </form>
@@ -573,33 +527,16 @@ function GuestEntryForm({ onSubmit, newGuest, setNewGuest, t }: any) {
   );
 }
 
-function InputWrapper({ label, value, onChange, type = "text", required, icon }: any) {
-  return (
-    <div className="space-y-3 w-full">
-      <label className="text-[11px] font-black text-slate-400 uppercase tracking-[4px] ml-1">{label}</label>
-      <div className="relative group">
-        <div className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-amber-500 transition-colors duration-300">{icon}</div>
-        <input type={type} className="w-full bg-slate-50 border-2 border-slate-100 rounded-3xl pl-16 pr-8 py-5 text-base font-black focus:border-amber-400 outline-none transition-all shadow-inner" 
-          value={value} onChange={e => onChange(e.target.value)} required={required} />
-      </div>
-    </div>
-  );
-}
-
 function AppUtility({ t }: any) {
   return (
-    <div className="bg-white p-10 sm:p-24 rounded-[5rem] shadow-2xl border border-slate-100 space-y-12 max-w-5xl mx-auto text-center relative overflow-hidden">
-      <div className="absolute top-0 left-0 w-64 h-64 bg-amber-500/5 -ml-32 -mt-32 rounded-full blur-3xl"></div>
-      <div className="flex flex-col items-center relative z-10">
-        <img src={LOGO_PATH} className="w-40 h-40 mb-12 drop-shadow-2xl grayscale opacity-20" onError={(e) => { e.currentTarget.src = "https://img.icons8.com/color/512/police-badge.png" }} />
-        <h3 className={`text-4xl sm:text-6xl leading-tight mb-10 ${GOLDEN_GRADIENT}`}>{t.appUtility}</h3>
-        <div className="h-1.5 bg-amber-500/20 w-32 mb-10 rounded-full"></div>
-      </div>
-      <p className="text-slate-700 font-bold leading-[2.5] text-lg sm:text-2xl text-justify px-8 sm:px-16 opacity-90 border-l-[12px] border-amber-500 py-8 bg-amber-50/30 rounded-r-[4rem] shadow-inner">
+    <div className="bg-white p-10 sm:p-20 rounded-[4rem] shadow-xl border border-slate-100 text-center max-w-4xl mx-auto">
+      <img src={LOGO_PATH} className="w-24 h-24 mx-auto mb-8 opacity-20" />
+      <h3 className={`text-3xl leading-tight mb-8 ${GOLDEN_GRADIENT}`}>{t.appUtility}</h3>
+      <p className="text-slate-700 font-bold leading-relaxed text-lg sm:text-xl text-justify border-l-8 border-amber-400 pl-8 pr-4 py-4 bg-slate-50/50 rounded-r-3xl">
         {t.utilityText}
       </p>
-      <div className="pt-24 border-t border-slate-100">
-        <p className="text-amber-900 font-black uppercase text-[11px] sm:text-sm tracking-[12px] opacity-40">{t.developerCredit}</p>
+      <div className="mt-16 pt-8 border-t border-slate-50">
+        <p className="text-slate-400 font-bold uppercase text-[10px] tracking-[5px]">{t.developerCredit}</p>
       </div>
     </div>
   );
@@ -607,28 +544,28 @@ function AppUtility({ t }: any) {
 
 function NotificationsFeed({ notifications, t, setView }: any) {
   return (
-    <div className="max-w-5xl mx-auto space-y-8 sm:space-y-10 animate-in slide-in-from-bottom-12 duration-1000">
+    <div className="max-w-4xl mx-auto space-y-6">
       {notifications.map((n: any) => (
-        <div key={n.id} className={`p-10 sm:p-14 bg-white border-l-[20px] rounded-[3.5rem] shadow-2xl flex gap-8 sm:gap-14 transition-all hover:-translate-x-3 
-          ${n.type === 'danger' ? 'border-red-600 bg-red-50/30' : 'border-indigo-600'}`}>
-          <div className={`w-20 h-20 sm:w-24 sm:h-24 rounded-[2rem] shadow-2xl border-4 border-white flex-shrink-0 flex items-center justify-center 
-            ${n.type === 'danger' ? 'bg-red-600 text-white shadow-red-200' : 'bg-indigo-600 text-white shadow-indigo-200'}`}>
-            <ShieldAlert size={40}/>
+        <div key={n.id} className={`p-8 bg-white border-l-[10px] rounded-[2rem] shadow-lg flex gap-6 transition-all hover:-translate-x-1
+          ${n.type === 'danger' ? 'border-red-600 bg-red-50/20' : 'border-indigo-600'}`}>
+          <div className={`w-16 h-16 rounded-2xl shadow-lg flex-shrink-0 flex items-center justify-center 
+            ${n.type === 'danger' ? 'bg-red-600 text-white' : 'bg-indigo-600 text-white'}`}>
+            <ShieldAlert size={28}/>
           </div>
           <div className="flex-1">
-            <span className="text-[10px] sm:text-[11px] font-black text-slate-400 uppercase tracking-[6px] py-2 px-5 bg-white shadow-xl rounded-xl inline-block mb-6 border border-slate-100">{n.timestamp}</span>
-            <h4 className="text-2xl sm:text-4xl font-black uppercase text-slate-900 tracking-tighter mb-5 leading-none">{n.title}</h4>
-            <p className="text-lg sm:text-xl font-bold text-slate-600 leading-relaxed opacity-80">{n.message}</p>
+            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 inline-block">{n.timestamp}</span>
+            <h4 className="text-xl font-black uppercase text-slate-900 mb-2">{n.title}</h4>
+            <p className="text-sm font-bold text-slate-600 opacity-80">{n.message}</p>
             {n.guestId && (
-              <button onClick={() => setView('guestList')} className="mt-10 px-12 py-5 bg-red-600 hover:bg-red-700 text-white text-[11px] font-black uppercase rounded-[1.5rem] shadow-2xl shadow-red-200 transition-all tracking-[5px] active:scale-95">Access Evidence Log</button>
+              <button onClick={() => setView('guestList')} className="mt-4 px-6 py-2.5 bg-red-600 active:scale-95 text-white text-[10px] font-black uppercase rounded-lg shadow-md transition-all">Review Records</button>
             )}
           </div>
         </div>
       ))}
       {notifications.length === 0 && (
-        <div className="text-center py-64 opacity-20 flex flex-col items-center">
-          <ShieldCheck size={140} className="mb-12 text-slate-200" />
-          <h3 className="text-2xl font-black uppercase tracking-[20px] text-slate-300">Region Secured</h3>
+        <div className="text-center py-40 opacity-20">
+          <ShieldCheck size={100} className="mx-auto mb-6 text-slate-300" />
+          <h3 className="text-xl font-black uppercase tracking-widest text-slate-400">All Systems Clear</h3>
         </div>
       )}
     </div>
