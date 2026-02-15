@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { UserRole, Guest, WantedPerson, Notification, Language, HotelProfile, UserAccount, PoliceProfile } from './types';
 import { translations } from './translations';
@@ -15,13 +16,13 @@ const LOGO_PATH = 'https://raw.githubusercontent.com/Anu-Anu/Begu-Engeda/main/lo
 const GOLDEN_GRADIENT = "text-transparent bg-clip-text bg-gradient-to-r from-amber-600 via-yellow-400 to-amber-700 font-black drop-shadow-sm";
 const ZONES = ["Assosa Zone", "Kamashi Zone", "Metekel Zone", "Mao Komo Special Woreda", "Assosa City Administration", "Gilgel Beles City Administration"];
 
+// Updated Credentials based on user request
 const AUTHORIZED_ACCOUNTS: UserAccount[] = [
-  { username: 'police', phoneNumber: 'admin', password: '1234', role: UserRole.LOCAL_POLICE, isVerified: true, isProfileComplete: false },
-  { username: 'reception', phoneNumber: '0911000000', password: 'password', role: UserRole.RECEPTION, isVerified: true, isProfileComplete: false },
-  { username: 'hotel1', phoneNumber: '0922000000', password: 'pass123', role: UserRole.RECEPTION, isVerified: true, isProfileComplete: false }
+  { username: 'police', phoneNumber: 'admin_p', password: '1234', role: UserRole.LOCAL_POLICE, isVerified: true, isProfileComplete: false },
+  { username: 'reception', phoneNumber: 'admin_r', password: '1234', role: UserRole.RECEPTION, isVerified: true, isProfileComplete: false }
 ];
 
-// --- REFINED UI COMPONENTS (Moved outside App to be accessible by other components like GuestEntryForm) ---
+// --- REFINED UI COMPONENTS ---
 
 const NavButton = ({ icon, label, active, onClick, count }: any) => (
   <button onClick={onClick} className={`w-full flex items-center gap-4 px-5 py-4 rounded-xl text-[11px] sm:text-xs font-black uppercase tracking-wide transition-all duration-200 group active:scale-[0.98]
@@ -312,7 +313,7 @@ export default function App() {
                 <div className="flex flex-col sm:flex-row gap-3 justify-between items-center no-print">
                    <div className="relative w-full max-w-sm">
                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-300" size={16}/>
-                     <input type="text" placeholder={t.searchPlaceholder} className="w-full bg-white border border-slate-200 rounded-lg pl-10 pr-4 py-2.5 outline-none focus:border-amber-500 font-semibold text-sm shadow-sm transition-all" 
+                     <input type="text" placeholder={t.searchPlaceholder} className="w-full bg-white border border-slate-200 rounded-lg pl-10 pr-4 py-2.5 outline-none focus:border-amber-500 font-semibold text-sm shadow-sm transition-all text-left" 
                        value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
                    </div>
                    <div className="flex gap-2 w-full sm:w-auto">
