@@ -16,21 +16,32 @@ const LOGO_PATH = 'https://raw.githubusercontent.com/Anu-Anu/Begu-Engeda/main/lo
 const GOLDEN_GRADIENT = "text-transparent bg-clip-text bg-gradient-to-r from-amber-600 via-yellow-400 to-amber-700 font-black drop-shadow-sm";
 const ZONES = ["Assosa Zone", "Kamashi Zone", "Metekel Zone", "Mao Komo Special Woreda", "Assosa City Administration", "Gilgel Beles City Administration"];
 
+// Pre-defined Authorized Accounts (Simulated Database)
+const AUTHORIZED_ACCOUNTS: UserAccount[] = [
+  { username: 'police', phoneNumber: 'admin', password: '1234', role: UserRole.LOCAL_POLICE, isVerified: true, isProfileComplete: false },
+  { username: 'reception', phoneNumber: '0911000000', password: 'password', role: UserRole.RECEPTION, isVerified: true, isProfileComplete: false },
+  { username: 'hotel1', phoneNumber: '0922000000', password: 'pass123', role: UserRole.RECEPTION, isVerified: true, isProfileComplete: false }
+];
+
 export default function App() {
   const [lang, setLang] = useState<Language>('am');
-  const [authState, setAuthState] = useState<'login' | 'signup' | 'otp' | 'setup_hotel' | 'setup_police' | 'authenticated'>('login');
+  const [authState, setAuthState] = useState<'login' | 'setup_hotel' | 'setup_police' | 'authenticated'>('login');
   const [currentUser, setCurrentUser] = useState<UserAccount | null>(() => {
     const saved = localStorage.getItem('begu_active_session');
     return saved ? JSON.parse(saved) : null;
   });
   
-  const [accounts, setAccounts] = useState<UserAccount[]>(() => JSON.parse(localStorage.getItem('begu_accounts') || '[]'));
+  const [accounts, setAccounts] = useState<UserAccount[]>(() => {
+    const saved = localStorage.getItem('begu_accounts');
+    return saved ? JSON.parse(saved) : AUTHORIZED_ACCOUNTS;
+  });
+  
   const [guests, setGuests] = useState<Guest[]>(() => JSON.parse(localStorage.getItem('begu_guests') || '[]'));
   const [wanted, setWanted] = useState<WantedPerson[]>(() => JSON.parse(localStorage.getItem('begu_wanted') || '[]'));
   const [notifications, setNotifications] = useState<Notification[]>(() => JSON.parse(localStorage.getItem('begu_notifications') || '[]'));
   
   const [view, setView] = useState<string>('dashboard');
-  const [loginData, setLoginData] = useState({ identifier: '', password: '', confirmPassword: '', username: '', otp: '' });
+  const [loginData, setLoginData] = useState({ identifier: '', password: '' });
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [zoomImg, setZoomImg] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -42,8 +53,12 @@ export default function App() {
   const t = translations[lang];
 
   useEffect(() => {
-    if (currentUser && authState === 'login') {
-      setAuthState('authenticated');
+    if (currentUser) {
+      if (!currentUser.isProfileComplete) {
+        setAuthState(currentUser.role === UserRole.RECEPTION ? 'setup_hotel' : 'setup_police');
+      } else {
+        setAuthState('authenticated');
+      }
     }
   }, []);
 
@@ -59,79 +74,46 @@ export default function App() {
     else localStorage.removeItem('begu_active_session');
   }, [currentUser]);
 
-  // Auth Handlers
-  const handleSignup = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (loginData.password !== loginData.confirmPassword) return alert(lang === 'am' ? "የይለፍ ቃል አይመሳሰልም!" : "Passwords do not match!");
-    if (accounts.find(a => a.phoneNumber === loginData.identifier)) return alert(lang === 'am' ? "ይህ ስልክ ቁጥር ቀደም ብሎ ተመዝግቧል!" : "Phone number already registered!");
-    
-    const otp = Math.floor(100000 + Math.random() * 900000).toString();
-    const newAcc: UserAccount = {
-      phoneNumber: loginData.identifier,
-      username: loginData.username,
-      password: loginData.password,
-      role: UserRole.RECEPTION,
-      isVerified: false,
-      isProfileComplete: false,
-      otpCode: otp
-    };
-    setAccounts([...accounts, newAcc]);
-    setCurrentUser(newAcc);
-    alert(lang === 'am' ? `የማረጋገጫ ቁጥር ወደ ${loginData.identifier} ተልኳል: ${otp}` : `Confirmation number sent to ${loginData.identifier}: ${otp}`);
-    setAuthState('otp');
-  };
-
-  const handleVerifyOtp = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (loginData.otp === currentUser?.otpCode) {
-      const updated = accounts.map(a => a.phoneNumber === currentUser.phoneNumber ? { ...a, isVerified: true } : a);
-      setAccounts(updated);
-      setCurrentUser({ ...currentUser, isVerified: true });
-      setAuthState('setup_hotel');
-    } else alert(lang === 'am' ? "የተሳሳተ የማረጋገጫ ቁጥር!" : "Invalid OTP!");
-  };
-
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
     setIsSyncing(true);
     
     setTimeout(() => {
       setIsSyncing(false);
-      // Pre-assigned Police account
-      if (loginData.identifier === 'police' && loginData.password === '1234') {
-        const pAcc = { username: 'Police_Office', phoneNumber: 'admin', role: UserRole.LOCAL_POLICE, isVerified: true, isProfileComplete: !!policeProfile.name } as any;
-        setCurrentUser(pAcc);
-        setAuthState(pAcc.isProfileComplete ? 'authenticated' : 'setup_police');
-        return;
-      }
-      
-      // Receptionist login - Works for any existing account in the simulation
-      const acc = accounts.find(a => a.phoneNumber === loginData.identifier && a.password === loginData.password);
+      // Check against pre-assigned accounts
+      const acc = accounts.find(a => 
+        (a.username === loginData.identifier || a.phoneNumber === loginData.identifier) && 
+        a.password === loginData.password
+      );
+
       if (acc) {
         setCurrentUser(acc);
-        if (!acc.isVerified) {
-          const otp = Math.floor(100000 + Math.random() * 900000).toString();
-          acc.otpCode = otp;
-          alert(lang === 'am' ? `የማረጋገጫ ቁጥር ተልኳል: ${otp}` : `OTP sent: ${otp}`);
-          setAuthState('otp');
-        } else if (!acc.isProfileComplete) {
-          setAuthState('setup_hotel');
+        if (!acc.isProfileComplete) {
+          setAuthState(acc.role === UserRole.RECEPTION ? 'setup_hotel' : 'setup_police');
         } else {
           setAuthState('authenticated');
         }
-      } else alert(lang === 'am' ? "የተሳሳተ ስልክ ቁጥር ወይም የይለፍ ቃል!" : "Invalid phone number or password!");
+      } else {
+        alert(lang === 'am' ? "የተሳሳተ ተጠቃሚ ስም ወይም የይለፍ ቃል!" : "Invalid username or password!");
+      }
     }, 800);
   };
 
-  const handleLogout = () => { setCurrentUser(null); setAuthState('login'); setView('dashboard'); setLoginData({ identifier: '', password: '', confirmPassword: '', username: '', otp: '' }); };
+  const handleLogout = () => {
+    setCurrentUser(null);
+    setAuthState('login');
+    setView('dashboard');
+    setLoginData({ identifier: '', password: '' });
+  };
 
   const handleHotelSetup = (e: React.FormEvent) => {
     e.preventDefault();
     if (hotelProfile.name && hotelProfile.zone) {
       if (currentUser) {
-        const updated = accounts.map(a => a.phoneNumber === currentUser.phoneNumber ? { ...a, isProfileComplete: true } : a);
-        setAccounts(updated);
-        setCurrentUser({ ...currentUser, isProfileComplete: true });
+        const updatedAcc = { ...currentUser, isProfileComplete: true };
+        const updatedAccounts = accounts.map(a => a.username === currentUser.username ? updatedAcc : a);
+        setAccounts(updatedAccounts);
+        setCurrentUser(updatedAcc);
       }
       setAuthState('authenticated');
     } else alert(lang === 'am' ? "እባክዎን ሁሉንም መረጃዎች ይሙሉ!" : "Please fill all details.");
@@ -139,8 +121,15 @@ export default function App() {
 
   const handlePoliceSetup = (e: React.FormEvent) => {
     e.preventDefault();
-    if (policeProfile.name && policeProfile.zone) setAuthState('authenticated');
-    else alert(lang === 'am' ? "እባክዎን ሁሉንም መረጃዎች ይሙሉ!" : "Please fill all details.");
+    if (policeProfile.name && policeProfile.zone) {
+      if (currentUser) {
+        const updatedAcc = { ...currentUser, isProfileComplete: true };
+        const updatedAccounts = accounts.map(a => a.username === currentUser.username ? updatedAcc : a);
+        setAccounts(updatedAccounts);
+        setCurrentUser(updatedAcc);
+      }
+      setAuthState('authenticated');
+    } else alert(lang === 'am' ? "እባክዎን ሁሉንም መረጃዎች ይሙሉ!" : "Please fill all details.");
   };
 
   const saveGuest = (e: React.FormEvent) => {
@@ -221,34 +210,17 @@ export default function App() {
           <div className="space-y-6">
             {authState === 'login' && (
               <form onSubmit={handleLogin} className="space-y-5">
-                <FormInput label={t.phoneNumber + " / " + t.username} value={loginData.identifier} onChange={(v:any) => setLoginData({...loginData, identifier: v})} required icon={<UserCircle size={20}/>} />
+                <FormInput label={t.username + " / " + t.phoneNumber} value={loginData.identifier} onChange={(v:any) => setLoginData({...loginData, identifier: v})} required icon={<UserCircle size={20}/>} />
                 <FormInput label={t.password} value={loginData.password} onChange={(v:any) => setLoginData({...loginData, password: v})} type="password" required icon={<Key size={20}/>} />
                 <button disabled={isSyncing} className="w-full bg-slate-900 hover:bg-slate-800 text-white font-black py-5 rounded-2xl shadow-2xl transition-all uppercase text-xs sm:text-sm tracking-[4px] mt-4 flex items-center justify-center gap-3 active:scale-95 disabled:opacity-70">
                   {isSyncing ? <Activity size={20} className="animate-spin" /> : <ShieldCheck size={20} />}
-                  {isSyncing ? "Syncing..." : t.login}
+                  {isSyncing ? "Verifying..." : t.login}
                 </button>
-                <button type="button" onClick={() => setAuthState('signup')} className="w-full text-center text-[11px] font-black text-indigo-600 uppercase tracking-widest mt-4 hover:underline">{t.noAccount}</button>
-              </form>
-            )}
-
-            {authState === 'signup' && (
-              <form onSubmit={handleSignup} className="space-y-5">
-                <FormInput label={t.username} value={loginData.username} onChange={(v:any) => setLoginData({...loginData, username: v})} required icon={<UserCircle size={20}/>} />
-                <FormInput label={t.phoneNumber} value={loginData.identifier} onChange={(v:any) => setLoginData({...loginData, identifier: v})} required icon={<Phone size={20}/>} />
-                <FormInput label={t.password} value={loginData.password} onChange={(v:any) => setLoginData({...loginData, password: v})} type="password" required icon={<Key size={20}/>} />
-                <FormInput label={t.confirmPassword} value={loginData.confirmPassword} onChange={(v:any) => setLoginData({...loginData, confirmPassword: v})} type="password" required icon={<CheckCircle2 size={20}/>} />
-                <button className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-black py-5 rounded-2xl shadow-2xl transition-all uppercase text-xs sm:text-sm tracking-[4px] mt-4">{t.signup}</button>
-                <button type="button" onClick={() => setAuthState('login')} className="w-full text-center text-[11px] font-black text-indigo-600 uppercase tracking-widest mt-4 hover:underline">{t.alreadyHaveAccount}</button>
-              </form>
-            )}
-
-            {authState === 'otp' && (
-              <form onSubmit={handleVerifyOtp} className="space-y-8">
-                <div className="bg-amber-50 p-6 rounded-2xl border-2 border-amber-100 text-center shadow-inner">
-                  <p className="font-bold text-slate-700 text-sm leading-relaxed">{t.enterOtp}</p>
+                <div className="p-4 bg-slate-50 border border-slate-100 rounded-xl mt-6">
+                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest text-center leading-relaxed">
+                    Access restricted to authorized personnel. Please use credentials provided by the Police Commission.
+                  </p>
                 </div>
-                <FormInput label={t.otpLabel} value={loginData.otp} onChange={(v:any) => setLoginData({...loginData, otp: v})} required icon={<ShieldCheck size={20}/>} />
-                <button className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-black py-5 rounded-2xl shadow-2xl transition-all uppercase text-xs sm:text-sm tracking-[4px]">{t.verify}</button>
               </form>
             )}
 
@@ -262,7 +234,7 @@ export default function App() {
                 <FormInput label={t.hotelAddress} value={hotelProfile.address} onChange={(v:any) => setHotelProfile({...hotelProfile, address: v})} required icon={<MapPin size={20}/>} />
                 <div className="space-y-2">
                   <label className="text-[11px] font-black text-slate-400 uppercase tracking-[3px] ml-1">{t.zone}</label>
-                  <select className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-6 py-4.5 font-bold text-sm outline-none focus:border-amber-400 appearance-none shadow-inner" value={hotelProfile.zone} onChange={e => setHotelProfile({...hotelProfile, zone: e.target.value})} required>
+                  <select className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-6 py-4.5 font-bold text-sm outline-none focus:border-amber-400 shadow-inner appearance-none" value={hotelProfile.zone} onChange={e => setHotelProfile({...hotelProfile, zone: e.target.value})} required>
                     <option value="">Select Zone</option>
                     {ZONES.map(z => <option key={z} value={z}>{z}</option>)}
                   </select>
@@ -280,7 +252,7 @@ export default function App() {
                 <FormInput label={t.location} value={policeProfile.address} onChange={(v:any) => setPoliceProfile({...policeProfile, address: v})} required icon={<MapPin size={20}/>} />
                 <div className="space-y-2">
                   <label className="text-[11px] font-black text-slate-400 uppercase tracking-[3px] ml-1">{t.zone}</label>
-                  <select className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-6 py-4.5 font-bold text-sm outline-none focus:border-amber-400 shadow-inner" value={policeProfile.zone} onChange={e => setPoliceProfile({...policeProfile, zone: e.target.value})} required>
+                  <select className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-6 py-4.5 font-bold text-sm outline-none focus:border-amber-400 shadow-inner appearance-none" value={policeProfile.zone} onChange={e => setPoliceProfile({...policeProfile, zone: e.target.value})} required>
                     <option value="">Select Jurisdiction</option>
                     {ZONES.map(z => <option key={z} value={z}>{z}</option>)}
                   </select>
@@ -304,9 +276,9 @@ export default function App() {
       {/* Mobile Sidebar Overlay */}
       {isSidebarOpen && <div className="fixed inset-0 bg-slate-950/70 z-40 md:hidden backdrop-blur-sm" onClick={() => setIsSidebarOpen(false)} />}
       
-      {/* Sidebar - Advanced Professional */}
+      {/* Sidebar */}
       <aside className={`fixed md:relative z-50 w-72 h-full bg-[#0F172A] text-white flex flex-col transition-all duration-500 no-print 
-        ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'} shadow-[10px_0_40px_-15px_rgba(0,0,0,0.3)]`}>
+        ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'} shadow-2xl`}>
         <div className="p-10 border-b border-white/5 text-center flex flex-col items-center">
           <img src={LOGO_PATH} className="w-20 h-20 mb-5 drop-shadow-2xl" onError={(e) => { e.currentTarget.src = "https://img.icons8.com/color/512/police-badge.png" }} />
           <h2 className={`text-2xl leading-tight ${GOLDEN_GRADIENT}`}>{t.appName}</h2>
@@ -339,7 +311,7 @@ export default function App() {
         </div>
       </aside>
 
-      {/* Main Judicial Feed */}
+      {/* Main Area */}
       <div className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden">
         <header className="bg-white border-b px-6 sm:px-12 py-5 flex justify-between items-center shadow-sm z-30">
           <div className="flex items-center gap-5">
@@ -347,13 +319,13 @@ export default function App() {
              <div className="leading-none">
                <h3 className="font-black text-slate-900 uppercase text-sm sm:text-xl tracking-tighter">{t[view] || view}</h3>
                <p className="text-[10px] text-slate-400 font-bold uppercase mt-1.5 tracking-widest hidden sm:block opacity-60">
-                 {currentUser?.role === UserRole.RECEPTION ? hotelProfile.name : policeProfile.name || "Regional Police Feed"}
+                 {currentUser?.role === UserRole.RECEPTION ? hotelProfile.name : policeProfile.name || "Regional Feed"}
                </p>
              </div>
           </div>
           <div className="flex items-center gap-4 sm:gap-8">
              <div className="hidden sm:flex items-center gap-3 text-[10px] font-black text-emerald-500 uppercase tracking-widest bg-emerald-50 px-4 py-2 rounded-full border border-emerald-100">
-               <Cloud size={14} /> Cloud Active
+               <Cloud size={14} /> Encrypted Session
              </div>
              <button onClick={() => setLang(lang === 'am' ? 'en' : 'am')} className="p-3 bg-slate-50 border border-slate-100 rounded-2xl hover:bg-amber-50 transition-all shadow-sm"><Globe size={20} className="text-amber-600" /></button>
              <div className="flex items-center gap-3 sm:gap-4 px-4 py-2 bg-slate-50 border border-slate-100 rounded-2xl">
@@ -366,21 +338,20 @@ export default function App() {
           </div>
         </header>
 
-        <main className="flex-1 overflow-y-auto p-5 sm:p-12 custom-scrollbar scroll-smooth bg-[#F8FAFC]">
+        <main className="flex-1 overflow-y-auto p-5 sm:p-12 custom-scrollbar scroll-smooth">
           {zoomImg && (
             <div className="fixed inset-0 bg-slate-950/98 z-[100] flex items-center justify-center p-6 sm:p-20" onClick={() => setZoomImg(null)}>
               <div className="relative max-w-5xl w-full animate-in zoom-in-95 duration-300">
                 <button className="absolute -top-16 right-0 text-white bg-white/10 p-5 rounded-full hover:bg-white/20 transition-all border border-white/10"><X size={32}/></button>
-                <img src={zoomImg} className="w-full h-auto max-h-[85vh] rounded-[3rem] shadow-[0_0_100px_rgba(255,255,255,0.1)] object-contain ring-4 ring-white/10" />
+                <img src={zoomImg} className="w-full h-auto max-h-[85vh] rounded-[3rem] shadow-2xl object-contain ring-4 ring-white/10" />
               </div>
             </div>
           )}
 
           <div className="max-w-7xl mx-auto space-y-8 sm:space-y-12 animate-in fade-in duration-1000">
-            {view === 'dashboard' && <Dashboard user={currentUser} t={t} guests={filteredGuests} notifications={notifications} wanted={wanted} setView={setView} />}
+            {view === 'dashboard' && <DashboardView user={currentUser} t={t} guests={filteredGuests} notifications={notifications} wanted={wanted} setView={setView} />}
             {view === 'registerGuest' && <GuestEntryForm newGuest={newGuest} setNewGuest={setNewGuest} onSubmit={saveGuest} t={t} />}
             
-            {/* COMPREHENSIVE JUDICIAL DATA TABLE */}
             {(view === 'guestList' || view === 'reports') && (
               <div className="space-y-8">
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-6 no-print">
@@ -396,68 +367,64 @@ export default function App() {
                 </div>
 
                 <div className="bg-white rounded-[3rem] shadow-[0_20px_50px_rgba(0,0,0,0.05)] border border-slate-100 overflow-hidden">
-                  <div className="p-10 border-b bg-slate-50/50 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                    <div>
-                      <h3 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tighter uppercase">{t.fullTableRecord}</h3>
-                      <p className="text-[10px] sm:text-[11px] font-black text-slate-400 uppercase tracking-[4px] mt-3 opacity-70">Benishangul Regional Surveillance Intelligence Log</p>
-                    </div>
-                    <div className="bg-slate-900 text-white text-[10px] font-black px-6 py-3 rounded-2xl uppercase tracking-[2px] shadow-xl">Total Records: {filteredGuests.length}</div>
+                  <div className="p-10 border-b bg-slate-50/50">
+                    <h3 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tighter uppercase">{t.fullTableRecord}</h3>
+                    <p className="text-[10px] sm:text-[11px] font-black text-slate-400 uppercase tracking-[4px] mt-3 opacity-70">Benishangul Regional Intelligence Log</p>
                   </div>
                   <div className="overflow-x-auto custom-scrollbar">
                     <table className="w-full text-left whitespace-nowrap">
                       <thead className="bg-slate-50/80 text-[11px] sm:text-[12px] font-black uppercase text-slate-400 tracking-[3px] border-b border-slate-100">
                         <tr>
-                          <th className="px-12 py-12">Identification Image</th>
-                          <th className="px-12 py-12">Full Judicial Name</th>
-                          <th className="px-12 py-12">Bed Registry</th>
-                          <th className="px-12 py-12">Property & Location Feed</th>
-                          <th className="px-12 py-12">Authorized Agent</th>
-                          <th className="px-12 py-12 text-center">Status</th>
+                          <th className="px-12 py-10">Identification</th>
+                          <th className="px-12 py-10">Guest Name</th>
+                          <th className="px-12 py-10">Bed ID</th>
+                          <th className="px-12 py-10">Property Feed</th>
+                          <th className="px-12 py-10">Officer</th>
+                          <th className="px-12 py-10 text-center">Protocol</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100 text-sm font-bold uppercase text-slate-700">
                         {filteredGuests.map((g: any) => (
                           <tr key={g.id} className="hover:bg-indigo-50/40 transition-all duration-500 group">
-                            <td className="px-12 py-10">
-                              <div className="w-24 h-36 rounded-[1.5rem] overflow-hidden shadow-2xl ring-4 ring-white border border-slate-100 transform group-hover:scale-105 transition-transform cursor-zoom-in relative" onClick={() => setZoomImg(g.idPhoto)}>
+                            <td className="px-12 py-8">
+                              <div className="w-20 h-32 rounded-2xl overflow-hidden shadow-2xl ring-4 ring-white border border-slate-100 transform group-hover:scale-105 transition-transform cursor-zoom-in relative" onClick={() => setZoomImg(g.idPhoto)}>
                                 <img src={g.idPhoto} className="w-full h-full object-cover" />
-                                <div className="absolute inset-0 bg-slate-900/0 group-hover:bg-slate-900/10 transition-colors"></div>
                               </div>
                             </td>
-                            <td className="px-12 py-10">
-                              <p className="font-black text-slate-900 text-xl sm:text-2xl tracking-tighter mb-2">{g.fullName}</p>
+                            <td className="px-12 py-8">
+                              <p className="font-black text-slate-900 text-xl tracking-tighter mb-2">{g.fullName}</p>
                               <div className="flex items-center gap-3 text-slate-400 text-[11px] font-black tracking-widest">
                                 <Globe size={16}/> {g.nationality} • {g.checkInDate}
                               </div>
                             </td>
-                            <td className="px-12 py-10">
-                              <span className="inline-block px-8 py-4 bg-white rounded-2xl text-slate-900 font-black border-2 border-slate-100 shadow-xl text-xl">BED #{g.roomNumber}</span>
+                            <td className="px-12 py-8">
+                              <span className="inline-block px-8 py-4 bg-white rounded-2xl text-slate-900 font-black border-2 border-slate-100 shadow-xl text-xl">#{g.roomNumber}</span>
                             </td>
-                            <td className="px-12 py-10 leading-relaxed">
+                            <td className="px-12 py-8 leading-relaxed">
                               <p className="text-slate-900 text-lg font-black tracking-tight">{g.hotelName}</p>
                               <p className="text-[11px] text-slate-500 mt-2 font-black italic uppercase tracking-widest opacity-60">{g.hotelAddress} | {g.hotelZone}</p>
                             </td>
-                            <td className="px-12 py-10">
+                            <td className="px-12 py-8">
                               <p className="text-slate-800 text-sm font-black">{g.receptionistName}</p>
                               <div className="flex items-center gap-2 text-[11px] text-indigo-600 font-black mt-4 bg-indigo-50/50 px-4 py-1.5 rounded-full inline-block border border-indigo-100">
                                 <Phone size={14}/> {g.receptionistPhone}
                               </div>
                             </td>
-                            <td className="px-12 py-10 text-center">
+                            <td className="px-12 py-8 text-center">
                               {g.isWanted ? (
-                                <span className="inline-flex items-center gap-3 px-10 py-5 bg-red-600 text-white rounded-full text-[11px] font-black shadow-[0_15px_30px_rgba(220,38,38,0.3)] animate-pulse border-4 border-white">
-                                  <AlertTriangle size={18}/> INTERCEPT REQUIRED
+                                <span className="inline-flex items-center gap-3 px-8 py-4 bg-red-600 text-white rounded-full text-[11px] font-black shadow-xl animate-pulse border-4 border-white">
+                                  <AlertTriangle size={18}/> INTERCEPT
                                 </span>
                               ) : (
-                                <span className="inline-flex items-center gap-3 px-10 py-5 bg-emerald-500 text-white rounded-full text-[11px] font-black shadow-[0_15px_30px_rgba(16,185,129,0.2)] border-4 border-white">
-                                  <CheckCircle2 size={18}/> REGION SECURE
+                                <span className="inline-flex items-center gap-3 px-8 py-4 bg-emerald-500 text-white rounded-full text-[11px] font-black shadow-lg border-4 border-white">
+                                  <CheckCircle2 size={18}/> SECURE
                                 </span>
                               )}
                             </td>
                           </tr>
                         ))}
                         {filteredGuests.length === 0 && (
-                          <tr><td colSpan={6} className="p-60 text-center text-slate-300 font-black tracking-[15px] uppercase opacity-20">No Regional Intelligence Log Found</td></tr>
+                          <tr><td colSpan={6} className="p-60 text-center text-slate-300 font-black tracking-[15px] uppercase opacity-20">No Intelligence Records Found</td></tr>
                         )}
                       </tbody>
                     </table>
@@ -470,7 +437,7 @@ export default function App() {
             {view === 'notifications' && <NotificationsFeed notifications={notifications} t={t} setView={setView} />}
             
             {view === 'settings' && (
-              <div className="max-w-xl mx-auto bg-white p-12 sm:p-16 rounded-[3.5rem] shadow-2xl border border-slate-100 animate-in slide-in-from-bottom-10 duration-700">
+              <div className="max-w-xl mx-auto bg-white p-12 sm:p-16 rounded-[3.5rem] shadow-2xl border border-slate-100">
                 <h3 className="text-2xl font-black mb-10 uppercase tracking-tighter text-center">{t.settings}</h3>
                 <div className="space-y-8">
                   <div className="p-8 bg-slate-50 rounded-3xl border-2 border-slate-100 space-y-6">
@@ -481,16 +448,9 @@ export default function App() {
                          <p className="font-black text-slate-900 text-lg">{currentUser?.username}</p>
                        </div>
                     </div>
-                    <div className="pt-6 border-t border-slate-200">
-                       <p className="text-[10px] font-black text-slate-400 uppercase tracking-[3px] mb-2">Registered Identifier</p>
-                       <p className="text-base font-black text-slate-700">{currentUser?.phoneNumber}</p>
-                    </div>
-                    <div className="flex items-center gap-3 text-[11px] font-black text-emerald-500 uppercase tracking-widest bg-emerald-100/50 p-4 rounded-2xl border border-emerald-100">
-                      <ShieldCheck size={18} /> Verified Account Session
-                    </div>
                   </div>
-                  <button onClick={() => alert("Cloud settings synchronized!")} className="w-full py-6 bg-slate-900 hover:bg-slate-800 text-white font-black rounded-[2rem] shadow-2xl transition-all uppercase tracking-[4px] text-sm flex items-center justify-center gap-4">
-                    <Save size={20}/> Synchronize Profile
+                  <button onClick={() => alert("Settings synced!")} className="w-full py-6 bg-slate-900 hover:bg-slate-800 text-white font-black rounded-[2rem] shadow-2xl transition-all uppercase tracking-[4px] text-sm flex items-center justify-center gap-4">
+                    <Save size={20}/> {t.save} Changes
                   </button>
                 </div>
               </div>
@@ -502,7 +462,7 @@ export default function App() {
   );
 }
 
-function Dashboard({ t, guests, notifications, wanted, setView, user }: any) {
+function DashboardView({ t, guests, notifications, wanted, setView, user }: any) {
   const stats = [
     { l: t.guestList, v: guests.length, c: 'bg-indigo-600', icon: <Users size={28}/> },
     { l: t.wantedPersons, v: wanted.length, c: 'bg-red-600', icon: <AlertTriangle size={28}/> },
@@ -597,7 +557,6 @@ function GuestEntryForm({ onSubmit, newGuest, setNewGuest, t }: any) {
               <p className="text-[12px] font-black uppercase text-slate-300 tracking-[8px] group-hover:text-indigo-900 transition-colors">{t.capturePhoto}</p>
               <input type="file" id="idUpload" className="hidden" onChange={handleFileUpload} capture="environment" />
             </div>
-            <div className="absolute inset-0 bg-indigo-50/0 group-hover:bg-indigo-50/10 transition-colors"></div>
           </div>
         </div>
         {newGuest.idPhoto && (
@@ -661,7 +620,7 @@ function NotificationsFeed({ notifications, t, setView }: any) {
             <h4 className="text-2xl sm:text-4xl font-black uppercase text-slate-900 tracking-tighter mb-5 leading-none">{n.title}</h4>
             <p className="text-lg sm:text-xl font-bold text-slate-600 leading-relaxed opacity-80">{n.message}</p>
             {n.guestId && (
-              <button onClick={() => setView('guestList')} className="mt-10 px-12 py-5 bg-red-600 hover:bg-red-700 text-white text-[11px] font-black uppercase rounded-[1.5rem] shadow-2xl shadow-red-200 transition-all tracking-[5px] active:scale-95">Access Regional Evidence Log</button>
+              <button onClick={() => setView('guestList')} className="mt-10 px-12 py-5 bg-red-600 hover:bg-red-700 text-white text-[11px] font-black uppercase rounded-[1.5rem] shadow-2xl shadow-red-200 transition-all tracking-[5px] active:scale-95">Access Evidence Log</button>
             )}
           </div>
         </div>
