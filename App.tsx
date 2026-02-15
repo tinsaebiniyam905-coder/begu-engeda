@@ -99,7 +99,7 @@ export default function App() {
     };
     setGuests([guest, ...guests]);
     
-    // Automatic Report to Police Receiving System
+    // Notification for strictly routed receiving system
     const newReport: Notification = {
       id: Date.now().toString(),
       title: isWanted ? t.alertWantedFound : 'Guest Check-in Report',
@@ -164,7 +164,7 @@ export default function App() {
   }, [notifications, user]);
 
   const handleShare = (guest: Guest, platform: 'telegram' | 'whatsapp') => {
-    const text = `*Begu Engeda Police Registry*\n\nGuest: ${guest.fullName}\nNationality: ${guest.nationality}\nProperty: ${guest.hotelName}\nRoom: ${guest.roomNumber}\nZone: ${guest.hotelZone}\nDate: ${guest.checkInDate}\n\nStatus: ${guest.isWanted ? 'WANTED ALERT' : 'Normal Check-in'}`;
+    const text = `*Police Registry Info - Begu Engeda*\n\nName: ${guest.fullName}\nNationality: ${guest.nationality}\nProperty: ${guest.hotelName}\nZone: ${guest.hotelZone}\nRoom: ${guest.roomNumber}\nStatus: ${guest.isWanted ? 'WANTED ALERT' : 'Normal'}`;
     const encoded = encodeURIComponent(text);
     const url = platform === 'telegram' 
       ? `https://t.me/share/url?url=${window.location.href}&text=${encoded}`
@@ -206,7 +206,6 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col md:flex-row font-sans">
-      {/* Sidebar */}
       <aside className="w-80 bg-slate-900 text-white flex flex-col no-print hidden md:flex border-r-4 border-amber-600/20 shadow-2xl">
         <div className="p-8 border-b border-white/5 text-center bg-slate-800/30">
           <img src={LOGO_PATH} className="w-20 h-20 mx-auto mb-4 drop-shadow-md" />
@@ -239,7 +238,6 @@ export default function App() {
         </div>
       </aside>
 
-      {/* Main Content */}
       <div className="flex-1 flex flex-col overflow-hidden">
         <header className="bg-white border-b px-8 py-5 flex justify-between items-center sticky top-0 z-30 shadow-sm no-print">
           <div className="flex items-center gap-4">
@@ -250,7 +248,7 @@ export default function App() {
              <div className="text-right leading-none hidden sm:block">
                 <p className="text-xs font-black text-slate-900 uppercase tracking-tight">{user.username}</p>
                 <p className="text-[10px] text-amber-600 font-bold uppercase mt-1 tracking-tighter">
-                   {user.zone || "Assigning..."} {user.isConfirmed && <Lock size={10} className="inline ml-1 opacity-50"/>}
+                   {user.zone || "Command post..."} {user.isConfirmed && <Lock size={10} className="inline ml-1 opacity-50"/>}
                 </p>
              </div>
              <div className="w-10 h-10 bg-amber-500 rounded-2xl text-white flex items-center justify-center font-black shadow-lg shadow-amber-500/20">{user.username[0].toUpperCase()}</div>
@@ -297,7 +295,6 @@ export default function App() {
 
 // --- Specialized Components ---
 
-// Added missing Input component
 function Input({ label, value, onChange, type = "text", required, icon }: any) {
   return (
     <div className="space-y-3 flex-1">
@@ -318,7 +315,87 @@ function Input({ label, value, onChange, type = "text", required, icon }: any) {
   );
 }
 
-// Added missing GuestForm component
+function SetupForm({ hotelProfile, setHotelProfile, onSubmit, t, isSettings }: any) {
+  return (
+    <div className="max-w-2xl mx-auto bg-white p-12 rounded-[50px] shadow-2xl border-2 border-slate-100">
+      <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tighter mb-10 text-center">
+        {isSettings ? t.settings : t.setupHotel}
+      </h3>
+      <form onSubmit={onSubmit} className="space-y-8">
+        <Input label={t.hotel} value={hotelProfile.name} onChange={(v: string) => setHotelProfile({...hotelProfile, name: v})} required icon={<Building2 size={20}/>} />
+        <Input label={t.hotelAddress} value={hotelProfile.address} onChange={(v: string) => setHotelProfile({...hotelProfile, address: v})} required icon={<MapPin size={20}/>} />
+        <div className="space-y-3">
+          <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">{t.zone}</label>
+          <div className="relative">
+            <select className="w-full bg-slate-50 border-4 border-slate-100 rounded-3xl px-6 py-5 font-black text-sm text-slate-800 outline-none focus:border-amber-500 transition-all appearance-none" value={hotelProfile.zone} onChange={e => setHotelProfile({...hotelProfile, zone: e.target.value})} required>
+              <option value="">Select Command Post</option>{ZONES.map(z => <option key={z} value={z}>{z}</option>)}
+            </select>
+            <ChevronRight className="absolute right-6 top-1/2 -translate-y-1/2 text-slate-300 rotate-90" size={24}/>
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-8">
+           <Input label={t.receptionistName} value={hotelProfile.receptionistName} onChange={(v: string) => setHotelProfile({...hotelProfile, receptionistName: v})} required icon={<Users size={20}/>} />
+           <Input label={t.phoneNumber} value={hotelProfile.phoneNumber} onChange={(v: string) => setHotelProfile({...hotelProfile, phoneNumber: v})} type="tel" required icon={<Phone size={20}/>} />
+        </div>
+        <button className="w-full bg-slate-900 text-white font-black py-6 rounded-3xl uppercase text-xs shadow-2xl hover:bg-slate-800 transition-all tracking-[0.3em]">Save Profile</button>
+      </form>
+    </div>
+  );
+}
+
+function JurisdictionSetup({ ZONES, setUser, user, setView, t }: any) {
+  const [tempZone, setTempZone] = useState<string | undefined>(user.zone);
+  const [isConfirming, setIsConfirming] = useState(false);
+
+  const handleConfirm = () => {
+    if (!tempZone) return;
+    localStorage.setItem('police_jurisdiction', tempZone);
+    localStorage.setItem('police_jurisdiction_confirmed', 'true');
+    setUser({...user, zone: tempZone, isConfirmed: true});
+    setView('dashboard');
+  };
+
+  return (
+    <div className="max-w-3xl mx-auto bg-white p-16 rounded-[60px] shadow-2xl border-2 border-slate-100 relative overflow-hidden">
+      <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/5 rounded-full -mr-32 -mt-32"></div>
+      <div className="text-center mb-12">
+         <div className="w-24 h-24 bg-indigo-50 text-indigo-600 rounded-[40px] flex items-center justify-center mx-auto mb-8 shadow-xl">
+            <ShieldCheck size={48}/>
+         </div>
+         <h3 className="text-3xl font-black text-slate-900 uppercase tracking-tighter">{t.selectJurisdiction}</h3>
+         <p className="text-xs text-slate-400 font-bold mt-3 tracking-widest uppercase">Police Receiving System Configuration</p>
+      </div>
+      
+      {!isConfirming ? (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+          {ZONES.map((z: string) => (
+            <button key={z} onClick={() => { setTempZone(z); setIsConfirming(true); }} className={`text-left p-8 bg-slate-50 border-4 rounded-[40px] font-black text-slate-600 hover:bg-indigo-50 hover:border-indigo-400 hover:text-indigo-800 transition-all flex items-center justify-between group ${tempZone === z ? 'border-indigo-500 bg-indigo-50 text-indigo-800' : 'border-transparent'}`}>
+              <span className="text-[13px] uppercase tracking-tight leading-tight">{z}</span>
+              <ChevronRight className="text-slate-300 group-hover:text-indigo-500 transition-all translate-x-2" size={24}/>
+            </button>
+          ))}
+        </div>
+      ) : (
+        <div className="space-y-10 animate-in zoom-in-95 duration-500">
+          <div className="p-12 bg-amber-50 rounded-[50px] border-4 border-amber-100 text-center relative overflow-hidden">
+            <div className="absolute top-0 left-0 w-full h-2 bg-amber-400"></div>
+            <Lock className="mx-auto mb-6 text-amber-500" size={40}/>
+            <h4 className="text-2xl font-black text-slate-900 uppercase mb-3 tracking-tight">{t.confirmJurisdiction}</h4>
+            <div className="py-4 px-8 bg-white/50 rounded-3xl inline-block mb-8 border-2 border-amber-200">
+               <p className="text-3xl font-black text-amber-700 uppercase tracking-tighter">{tempZone}</p>
+            </div>
+            <p className="text-xs text-slate-600 font-black leading-relaxed mb-10 uppercase tracking-tight max-w-sm mx-auto">{t.jurisdictionWarning}</p>
+            <div className="flex gap-6 max-w-md mx-auto">
+               <button onClick={() => setIsConfirming(false)} className="flex-1 py-5 bg-white border-4 border-slate-100 rounded-3xl text-[11px] font-black uppercase text-slate-400 hover:bg-slate-50 transition-all tracking-widest">Change</button>
+               <button onClick={handleConfirm} className="flex-1 py-5 bg-slate-900 text-white rounded-3xl text-[11px] font-black uppercase tracking-[0.2em] shadow-2xl hover:bg-slate-800 transition-all">{t.confirmBtn}</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function GuestForm({ newGuest, setNewGuest, onSubmit, t, handleFileUpload }: any) {
   return (
     <div className="max-w-4xl mx-auto bg-white p-16 rounded-[60px] shadow-2xl border-2 border-slate-100 relative overflow-hidden">
@@ -358,7 +435,6 @@ function GuestForm({ newGuest, setNewGuest, onSubmit, t, handleFileUpload }: any
   );
 }
 
-// Added missing WantedForm component
 function WantedForm({ t, handleFileUpload, addWanted, newWanted, setNewWanted }: any) {
   return (
     <div className="max-w-4xl mx-auto bg-white p-16 rounded-[60px] shadow-2xl border-2 border-slate-100 relative overflow-hidden">
@@ -541,55 +617,119 @@ function Dashboard({ t, guests, notifications, wanted, setView, user }: any) {
   );
 }
 
-function JurisdictionSetup({ ZONES, setUser, user, setView, t }: any) {
-  const [tempZone, setTempZone] = useState<string | undefined>(user.zone);
-  const [isConfirming, setIsConfirming] = useState(false);
+function ListView({ items, t, setZoomImg, handleShare, user }: any) {
+  return (
+    <div className="space-y-8">
+       <div className="flex justify-between items-end mb-4 no-print">
+          <div>
+             <h2 className="text-3xl font-black text-slate-900 uppercase tracking-tighter">Registry Database</h2>
+             <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mt-1">
+               {user.role === UserRole.SUPER_POLICE ? "Regional Oversight" : `${user.zone} Jurisdiction`} Records • {items.length} Secure Entries
+             </p>
+          </div>
+          <button onClick={() => window.print()} className="flex items-center gap-3 bg-white border-4 border-slate-100 px-8 py-4 rounded-3xl text-[11px] font-black uppercase tracking-widest text-slate-700 hover:border-amber-500 transition-all shadow-sm">
+             <Printer size={18}/> {t.print}
+          </button>
+       </div>
+       <div className="bg-white rounded-[50px] shadow-sm border-4 border-slate-50 overflow-hidden overflow-x-auto">
+         <table className="w-full text-left min-w-[900px]">
+           <thead className="bg-slate-100/50 text-[11px] font-black uppercase text-slate-400 tracking-[0.2em] border-b-2 border-slate-100">
+             <tr>
+               <th className="px-10 py-8">Biometrics</th>
+               <th className="px-10 py-8">Identity</th>
+               <th className="px-10 py-8">Property Data</th>
+               <th className="px-10 py-8">Status</th>
+               <th className="px-10 py-8 text-center no-print">Actions</th>
+             </tr>
+           </thead>
+           <tbody className="divide-y-2 divide-slate-50 text-[12px] font-black uppercase text-slate-800">
+             {items.map((g: any) => (
+               <tr key={g.id} className="hover:bg-slate-50 transition-all group">
+                 <td className="px-10 py-6">
+                   <div className="relative w-14 h-20 rounded-2xl overflow-hidden border-4 border-slate-200 shadow-lg cursor-zoom-in group-hover:border-amber-500 transition-all" onClick={() => setZoomImg(g.idPhoto)}>
+                      {g.idPhoto ? <img src={g.idPhoto} className="w-full h-full object-cover"/> : <div className="w-full h-full bg-slate-100 flex items-center justify-center text-slate-300"><ImageIcon size={24}/></div>}
+                      <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"><Maximize2 size={20} className="text-white"/></div>
+                   </div>
+                 </td>
+                 <td className="px-10 py-6">
+                    <p className="text-[14px] font-black tracking-tight text-slate-900 group-hover:text-amber-600 transition-colors">{g.fullName}</p>
+                    <p className="text-[10px] text-slate-400 tracking-widest mt-1.5">{g.nationality}</p>
+                 </td>
+                 <td className="px-10 py-6">
+                    <p className="text-slate-800">{g.hotelName}</p>
+                    <p className="text-[10px] text-amber-600 tracking-widest mt-1.5 font-black uppercase">{g.hotelZone} • Room {g.roomNumber}</p>
+                 </td>
+                 <td className="px-10 py-6">
+                    {g.isWanted ? (
+                      <span className="flex items-center gap-2 text-red-600 bg-red-50 px-4 py-2 rounded-2xl border-2 border-red-100 animate-pulse">
+                         <AlertTriangle size={16}/> WANTED
+                      </span>
+                    ) : (
+                      <span className="flex items-center gap-2 text-emerald-600 bg-emerald-50 px-4 py-2 rounded-2xl border-2 border-emerald-100">
+                         <ShieldCheck size={16}/> VERIFIED
+                      </span>
+                    )}
+                 </td>
+                 <td className="px-10 py-6 no-print">
+                    <div className="flex justify-center items-center gap-4 opacity-0 group-hover:opacity-100 transition-all translate-x-4 group-hover:translate-x-0">
+                       <button onClick={() => handleShare(g, 'whatsapp')} className="p-4 bg-emerald-50 text-emerald-600 rounded-2xl hover:bg-emerald-600 hover:text-white transition-all shadow-sm" title="Share via WhatsApp"><Send size={18}/></button>
+                       <button onClick={() => handleShare(g, 'telegram')} className="p-4 bg-blue-50 text-blue-600 rounded-2xl hover:bg-blue-600 hover:text-white transition-all shadow-sm" title="Share via Telegram"><Share2 size={18}/></button>
+                    </div>
+                 </td>
+               </tr>
+             ))}
+           </tbody>
+         </table>
+       </div>
+    </div>
+  );
+}
 
-  const handleConfirm = () => {
-    if (!tempZone) return;
-    localStorage.setItem('police_jurisdiction', tempZone);
-    localStorage.setItem('police_jurisdiction_confirmed', 'true');
-    setUser({...user, zone: tempZone, isConfirmed: true});
-    setView('dashboard');
-  };
+function HotelDir({ hotels, t, user }: any) {
+  const filtered = useMemo(() => {
+    if (user.role === UserRole.SUPER_POLICE) return hotels;
+    return hotels.filter((h: any) => h.zone === user.zone);
+  }, [hotels, user]);
 
   return (
-    <div className="max-w-3xl mx-auto bg-white p-16 rounded-[60px] shadow-2xl border-2 border-slate-100 relative overflow-hidden">
-      <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/5 rounded-full -mr-32 -mt-32"></div>
-      <div className="text-center mb-12">
-         <div className="w-24 h-24 bg-indigo-50 text-indigo-600 rounded-[40px] flex items-center justify-center mx-auto mb-8 shadow-xl">
-            <ShieldCheck size={48}/>
-         </div>
-         <h3 className="text-3xl font-black text-slate-900 uppercase tracking-tighter">{t.selectJurisdiction}</h3>
-         <p className="text-xs text-slate-400 font-bold mt-3 tracking-widest uppercase">Police Receiving System Configuration</p>
-      </div>
-      
-      {!isConfirming ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-          {ZONES.map((z: string) => (
-            <button key={z} onClick={() => { setTempZone(z); setIsConfirming(true); }} className={`text-left p-8 bg-slate-50 border-4 rounded-[40px] font-black text-slate-600 hover:bg-indigo-50 hover:border-indigo-400 hover:text-indigo-800 transition-all flex items-center justify-between group ${tempZone === z ? 'border-indigo-500 bg-indigo-50 text-indigo-800' : 'border-transparent'}`}>
-              <span className="text-[13px] uppercase tracking-tight leading-tight">{z}</span>
-              <ChevronRight className="text-slate-300 group-hover:text-indigo-500 transition-all translate-x-2" size={24}/>
-            </button>
-          ))}
-        </div>
-      ) : (
-        <div className="space-y-10 animate-in zoom-in-95 duration-500">
-          <div className="p-12 bg-amber-50 rounded-[50px] border-4 border-amber-100 text-center relative overflow-hidden">
-            <div className="absolute top-0 left-0 w-full h-2 bg-amber-400"></div>
-            <Lock className="mx-auto mb-6 text-amber-500" size={40}/>
-            <h4 className="text-2xl font-black text-slate-900 uppercase mb-3 tracking-tight">{t.confirmJurisdiction}</h4>
-            <div className="py-4 px-8 bg-white/50 rounded-3xl inline-block mb-8 border-2 border-amber-200">
-               <p className="text-3xl font-black text-amber-700 uppercase tracking-tighter">{tempZone}</p>
-            </div>
-            <p className="text-xs text-slate-600 font-black leading-relaxed mb-10 uppercase tracking-tight max-w-sm mx-auto">{t.jurisdictionWarning}</p>
-            <div className="flex gap-6 max-w-md mx-auto">
-               <button onClick={() => setIsConfirming(false)} className="flex-1 py-5 bg-white border-4 border-slate-100 rounded-3xl text-[11px] font-black uppercase text-slate-400 hover:bg-slate-50 transition-all tracking-widest">Change</button>
-               <button onClick={handleConfirm} className="flex-1 py-5 bg-slate-900 text-white rounded-3xl text-[11px] font-black uppercase tracking-[0.2em] shadow-2xl hover:bg-slate-800 transition-all">{t.confirmBtn}</button>
-            </div>
-          </div>
-        </div>
-      )}
+    <div className="space-y-8">
+       <div className="mb-4">
+          <h2 className="text-3xl font-black text-slate-900 uppercase tracking-tighter">Property Directory</h2>
+          <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mt-1">
+            {user.role === UserRole.SUPER_POLICE ? "Regional Command Oversight" : `${user.zone} Jurisdiction Properties`} • {filtered.length} Active Feeds
+          </p>
+       </div>
+       <div className="bg-white rounded-[50px] shadow-sm border-4 border-slate-50 overflow-hidden overflow-x-auto">
+         <table className="w-full text-left min-w-[900px]">
+           <thead className="bg-slate-100/50 text-[11px] font-black uppercase text-slate-400 tracking-[0.2em] border-b-2 border-slate-100">
+             <tr>
+               <th className="px-10 py-8">Property Name</th>
+               <th className="px-10 py-8">Jurisdiction</th>
+               <th className="px-10 py-8">Personnel</th>
+               <th className="px-10 py-8">Security Contact</th>
+             </tr>
+           </thead>
+           <tbody className="divide-y-2 divide-slate-50 text-[12px] font-black uppercase text-slate-800">
+             {filtered.map((h: any) => (
+               <tr key={h.id} className="hover:bg-slate-50 transition-all">
+                 <td className="px-10 py-6">
+                    <p className="text-[14px] font-black tracking-tight text-slate-900">{h.name}</p>
+                    <p className="text-[10px] text-slate-400 tracking-widest mt-1.5 uppercase">{h.address}</p>
+                 </td>
+                 <td className="px-10 py-6">
+                    <span className="bg-slate-100 px-5 py-2.5 rounded-2xl text-[10px] font-black text-slate-600 tracking-widest">{h.zone}</span>
+                 </td>
+                 <td className="px-10 py-6 text-slate-500 font-bold">{h.receptionistName}</td>
+                 <td className="px-10 py-6">
+                    <div className="flex items-center gap-3 text-indigo-600 font-black tracking-[0.2em]">
+                       <Phone size={14}/> {h.phoneNumber}
+                    </div>
+                 </td>
+               </tr>
+             ))}
+           </tbody>
+         </table>
+       </div>
     </div>
   );
 }
@@ -742,177 +882,6 @@ function NotifView({ notifications, t, setView }: any) {
            <p className="text-[11px] font-black text-slate-200 uppercase mt-3 tracking-widest">No Active Security Alerts in Jurisdiction</p>
         </div>
       )}
-    </div>
-  );
-}
-
-function NavItemCustom({ icon, label, active, onClick, count }: any) {
-  // Utility function for nav items with specialized counts
-  return (
-    <button onClick={onClick} className={`w-full flex items-center gap-4 px-6 py-5 rounded-2xl text-[11px] font-black uppercase tracking-widest transition-all ${active ? 'bg-amber-500 text-white shadow-xl translate-x-2' : 'text-slate-400 hover:bg-white/5'}`}>
-      <span>{icon}</span>
-      <span className="flex-1 text-left">{label}</span>
-      {count > 0 && <span className="bg-red-500 text-white text-[9px] px-2 py-1 rounded-xl shadow-lg">{count}</span>}
-    </button>
-  );
-}
-
-// Renamed and fixed SetupForm
-function SetupForm({ hotelProfile, setHotelProfile, onSubmit, t, isSettings }: any) {
-  return (
-    <div className="max-w-2xl mx-auto bg-white p-12 rounded-[50px] shadow-2xl border-2 border-slate-100">
-      <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tighter mb-10 text-center">
-        {isSettings ? t.settings : t.setupHotel}
-      </h3>
-      <form onSubmit={onSubmit} className="space-y-8">
-        <Input label={t.hotel} value={hotelProfile.name} onChange={(v: string) => setHotelProfile({...hotelProfile, name: v})} required icon={<Building2 size={20}/>} />
-        <Input label={t.hotelAddress} value={hotelProfile.address} onChange={(v: string) => setHotelProfile({...hotelProfile, address: v})} required icon={<MapPin size={20}/>} />
-        <div className="space-y-3">
-          <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">{t.zone}</label>
-          <div className="relative">
-            <select className="w-full bg-slate-50 border-4 border-slate-100 rounded-3xl px-6 py-5 font-black text-sm text-slate-800 outline-none focus:border-amber-500 transition-all appearance-none" value={hotelProfile.zone} onChange={e => setHotelProfile({...hotelProfile, zone: e.target.value})} required>
-              <option value="">Select Command Post</option>{ZONES.map(z => <option key={z} value={z}>{z}</option>)}
-            </select>
-            <ChevronRight className="absolute right-6 top-1/2 -translate-y-1/2 text-slate-300 rotate-90" size={24}/>
-          </div>
-        </div>
-        <div className="grid grid-cols-2 gap-8">
-           <Input label={t.receptionistName} value={hotelProfile.receptionistName} onChange={(v: string) => setHotelProfile({...hotelProfile, receptionistName: v})} required icon={<Users size={20}/>} />
-           <Input label={t.phoneNumber} value={hotelProfile.phoneNumber} onChange={(v: string) => setHotelProfile({...hotelProfile, phoneNumber: v})} type="tel" required icon={<Phone size={20}/>} />
-        </div>
-        <button className="w-full bg-slate-900 text-white font-black py-6 rounded-3xl uppercase text-xs shadow-2xl hover:bg-slate-800 transition-all tracking-[0.3em]">Save Profile</button>
-      </form>
-    </div>
-  );
-}
-
-// Renamed ListView
-function ListView({ items, t, setZoomImg, handleShare, user }: any) {
-  return (
-    <div className="space-y-8">
-       <div className="flex justify-between items-end mb-4 no-print">
-          <div>
-             <h2 className="text-3xl font-black text-slate-900 uppercase tracking-tighter">Registry Database</h2>
-             <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mt-1">
-               {user.role === UserRole.SUPER_POLICE ? "Regional Oversight" : `${user.zone} Jurisdiction`} Records • {items.length} Secure Entries
-             </p>
-          </div>
-          <button onClick={() => window.print()} className="flex items-center gap-3 bg-white border-4 border-slate-100 px-8 py-4 rounded-3xl text-[11px] font-black uppercase tracking-widest text-slate-700 hover:border-amber-500 transition-all shadow-sm">
-             <Printer size={18}/> {t.print}
-          </button>
-       </div>
-       <div className="bg-white rounded-[50px] shadow-sm border-4 border-slate-50 overflow-hidden overflow-x-auto">
-         <table className="w-full text-left min-w-[900px]">
-           <thead className="bg-slate-100/50 text-[11px] font-black uppercase text-slate-400 tracking-[0.2em] border-b-2 border-slate-100">
-             <tr>
-               <th className="px-10 py-8">Biometrics</th>
-               <th className="px-10 py-8">Identity</th>
-               <th className="px-10 py-8">Property Data</th>
-               <th className="px-10 py-8">Status</th>
-               <th className="px-10 py-8 text-center no-print">receiving</th>
-             </tr>
-           </thead>
-           <tbody className="divide-y-2 divide-slate-50 text-[12px] font-black uppercase text-slate-800">
-             {items.map((g: any) => (
-               <tr key={g.id} className="hover:bg-slate-50 transition-all group">
-                 <td className="px-10 py-6">
-                   <div className="relative w-14 h-20 rounded-2xl overflow-hidden border-4 border-slate-200 shadow-lg cursor-zoom-in group-hover:border-amber-500 transition-all" onClick={() => setZoomImg(g.idPhoto)}>
-                      {g.idPhoto ? <img src={g.idPhoto} className="w-full h-full object-cover"/> : <div className="w-full h-full bg-slate-100 flex items-center justify-center text-slate-300"><ImageIcon size={24}/></div>}
-                      <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"><Maximize2 size={20} className="text-white"/></div>
-                   </div>
-                 </td>
-                 <td className="px-10 py-6">
-                    <p className="text-[14px] font-black tracking-tight text-slate-900 group-hover:text-amber-600 transition-colors">{g.fullName}</p>
-                    <p className="text-[10px] text-slate-400 tracking-widest mt-1.5">{g.nationality}</p>
-                 </td>
-                 <td className="px-10 py-6">
-                    <p className="text-slate-800">{g.hotelName}</p>
-                    <p className="text-[10px] text-amber-600 tracking-widest mt-1.5 font-black uppercase">{g.hotelZone} • Room {g.roomNumber}</p>
-                 </td>
-                 <td className="px-10 py-6">
-                    {g.isWanted ? (
-                      <span className="flex items-center gap-2 text-red-600 bg-red-50 px-4 py-2 rounded-2xl border-2 border-red-100 animate-pulse">
-                         <AlertTriangle size={16}/> WANTED
-                      </span>
-                    ) : (
-                      <span className="flex items-center gap-2 text-emerald-600 bg-emerald-50 px-4 py-2 rounded-2xl border-2 border-emerald-100">
-                         <ShieldCheck size={16}/> VERIFIED
-                      </span>
-                    )}
-                 </td>
-                 <td className="px-10 py-6 no-print">
-                    <div className="flex justify-center items-center gap-4 opacity-0 group-hover:opacity-100 transition-all translate-x-4 group-hover:translate-x-0">
-                       <button onClick={() => handleShare(g, 'whatsapp')} className="p-4 bg-emerald-50 text-emerald-600 rounded-2xl hover:bg-emerald-600 hover:text-white transition-all shadow-sm" title="Share via WhatsApp"><Send size={18}/></button>
-                       <button onClick={() => handleShare(g, 'telegram')} className="p-4 bg-blue-50 text-blue-600 rounded-2xl hover:bg-blue-600 hover:text-white transition-all shadow-sm" title="Share via Telegram"><Share2 size={18}/></button>
-                    </div>
-                 </td>
-               </tr>
-             ))}
-           </tbody>
-         </table>
-         {items.length === 0 && (
-           <div className="text-center py-40 border-t-2 border-slate-50">
-              <Activity className="mx-auto mb-6 text-slate-100" size={64}/>
-              <p className="text-slate-300 font-black uppercase tracking-[0.5em] text-sm opacity-40">Registry Entry Not Found</p>
-           </div>
-         )}
-       </div>
-    </div>
-  );
-}
-
-// Renamed HotelDir
-function HotelDir({ hotels, t, user }: any) {
-  const filtered = useMemo(() => {
-    if (user.role === UserRole.SUPER_POLICE) return hotels;
-    return hotels.filter((h: any) => h.zone === user.zone);
-  }, [hotels, user]);
-
-  return (
-    <div className="space-y-8">
-       <div className="mb-4">
-          <h2 className="text-3xl font-black text-slate-900 uppercase tracking-tighter">Property receiving</h2>
-          <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mt-1">
-            {user.role === UserRole.SUPER_POLICE ? "Regional Command Oversight" : `${user.zone} Jurisdiction Properties`} • {filtered.length} Active Feeds
-          </p>
-       </div>
-       <div className="bg-white rounded-[50px] shadow-sm border-4 border-slate-50 overflow-hidden overflow-x-auto">
-         <table className="w-full text-left min-w-[900px]">
-           <thead className="bg-slate-100/50 text-[11px] font-black uppercase text-slate-400 tracking-[0.2em] border-b-2 border-slate-100">
-             <tr>
-               <th className="px-10 py-8">Property Name</th>
-               <th className="px-10 py-8">receiving Jurisdiction</th>
-               <th className="px-10 py-8">Personnel</th>
-               <th className="px-10 py-8">Security receiving</th>
-             </tr>
-           </thead>
-           <tbody className="divide-y-2 divide-slate-50 text-[12px] font-black uppercase text-slate-800">
-             {filtered.map((h: any) => (
-               <tr key={h.id} className="hover:bg-slate-50 transition-all">
-                 <td className="px-10 py-6">
-                    <p className="text-[14px] font-black tracking-tight text-slate-900">{h.name}</p>
-                    <p className="text-[10px] text-slate-400 tracking-widest mt-1.5 uppercase">{h.address}</p>
-                 </td>
-                 <td className="px-10 py-6">
-                    <span className="bg-slate-100 px-5 py-2.5 rounded-2xl text-[10px] font-black text-slate-600 tracking-widest">{h.zone}</span>
-                 </td>
-                 <td className="px-10 py-6 text-slate-500 font-bold">{h.receptionistName}</td>
-                 <td className="px-10 py-6">
-                    <div className="flex items-center gap-3 text-indigo-600 font-black tracking-[0.2em]">
-                       <Phone size={14}/> {h.phoneNumber}
-                    </div>
-                 </td>
-               </tr>
-             ))}
-           </tbody>
-         </table>
-         {filtered.length === 0 && (
-            <div className="text-center py-40">
-               <Building2 className="mx-auto mb-6 text-slate-100" size={64}/>
-               <p className="text-slate-300 font-black uppercase tracking-[0.5em] text-sm opacity-40">No Properties Registered in Jurisdiction</p>
-            </div>
-         )}
-       </div>
     </div>
   );
 }
