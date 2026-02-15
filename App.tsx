@@ -14,15 +14,15 @@ import {
 
 const LOGO_PATH = 'https://raw.githubusercontent.com/Anu-Anu/Begu-Engeda/main/logo.png';
 const GOLDEN_GRADIENT = "text-transparent bg-clip-text bg-gradient-to-r from-amber-600 via-yellow-400 to-amber-700 font-black drop-shadow-sm";
-const ZONES = ["Assosa Zone", "Kamashi Zone", "Metekel Zone", "Mao Komo Special Woreda", "Assosa City Administration", "Gilgel Beles City Administration"];
+const ZONES = ["Assosa Zone", "Kamashi Zone", "Metekel Zone", "Mao Komo Special Woreda", "Assosa City Administration","kamash City Administration","Bambasi City Administration", "Gilgel Beles City Administration"];
 
-// Fixed Credentials as requested
+// Updated Authorized Accounts with specific credentials requested
 const AUTHORIZED_ACCOUNTS: UserAccount[] = [
-  { username: 'police', password: '1234', role: UserRole.LOCAL_POLICE, isVerified: true, isProfileComplete: false },
-  { username: 'reception', password: '1234', role: UserRole.RECEPTION, isVerified: true, isProfileComplete: false }
+  { username: 'police', phoneNumber: 'admin_hq', password: 'police@1234', role: UserRole.SUPER_POLICE, isVerified: true, isProfileComplete: false },
+  { username: 'reception', phoneNumber: 'admin_rec', password: '1234', role: UserRole.RECEPTION, isVerified: true, isProfileComplete: false }
 ];
 
-// --- REFINED UI COMPONENTS (Moved outside for performance) ---
+// --- REFINED UI COMPONENTS ---
 
 const NavButton = ({ icon, label, active, onClick, count }: any) => (
   <button onClick={onClick} className={`w-full flex items-center gap-4 px-5 py-4 rounded-xl text-[11px] sm:text-xs font-black uppercase tracking-wide transition-all duration-200 group active:scale-[0.98]
@@ -99,7 +99,6 @@ export default function App() {
     e.preventDefault();
     if (!loginData.identifier || !loginData.password) return;
     setIsSyncing(true);
-    // Mimic API delay
     setTimeout(() => {
       setIsSyncing(false);
       const acc = AUTHORIZED_ACCOUNTS.find(a => 
@@ -107,20 +106,21 @@ export default function App() {
         a.password === loginData.password
       );
       if (acc) {
-        // Load existing profile from storage if available
+        // Load saved profile if it exists for this specific username
         const savedHotel = JSON.parse(localStorage.getItem(`begu_hotel_${acc.username}`) || 'null');
         const savedPolice = JSON.parse(localStorage.getItem(`begu_police_${acc.username}`) || 'null');
         
         if (savedHotel) setHotelProfile(savedHotel);
         if (savedPolice) setPoliceProfile(savedPolice);
 
-        setCurrentUser({
+        const updatedAcc = {
           ...acc,
           isProfileComplete: acc.role === UserRole.RECEPTION ? !!savedHotel : !!savedPolice
-        });
+        };
+        setCurrentUser(updatedAcc);
         
-        setAuthState(!(acc.role === UserRole.RECEPTION ? !!savedHotel : !!savedPolice) 
-          ? (acc.role === UserRole.RECEPTION ? 'setup_hotel' : 'setup_police') 
+        setAuthState(!updatedAcc.isProfileComplete 
+          ? (updatedAcc.role === UserRole.RECEPTION ? 'setup_hotel' : 'setup_police') 
           : 'authenticated');
       } else {
         alert(lang === 'am' ? "የተሳሳተ ተጠቃሚ ስም ወይም የይለፍ ቃል!" : "Invalid username or password!");
@@ -141,7 +141,6 @@ export default function App() {
     if (isComplete && currentUser) {
       const updatedUser = { ...currentUser, isProfileComplete: true };
       setCurrentUser(updatedUser);
-      // Save profile specifically for this account
       if (type === 'hotel') localStorage.setItem(`begu_hotel_${currentUser.username}`, JSON.stringify(hotelProfile));
       else localStorage.setItem(`begu_police_${currentUser.username}`, JSON.stringify(policeProfile));
       setAuthState('authenticated');
@@ -182,8 +181,12 @@ export default function App() {
 
   const filteredGuests = useMemo(() => {
     let list = guests;
-    if (currentUser?.role === UserRole.LOCAL_POLICE) list = guests.filter(g => g.hotelZone === policeProfile.zone);
-    else if (currentUser?.role === UserRole.RECEPTION) list = guests.filter(g => g.hotelName === hotelProfile.name);
+    // SUPER_POLICE (police/police@1234) sees EVERYTHING (no filtering)
+    if (currentUser?.role === UserRole.LOCAL_POLICE) {
+      list = guests.filter(g => g.hotelZone === policeProfile.zone);
+    } else if (currentUser?.role === UserRole.RECEPTION) {
+      list = guests.filter(g => g.hotelName === hotelProfile.name);
+    }
     return list.filter(g => g.fullName.toLowerCase().includes(searchTerm.toLowerCase()));
   }, [guests, currentUser, hotelProfile, policeProfile, searchTerm]);
 
