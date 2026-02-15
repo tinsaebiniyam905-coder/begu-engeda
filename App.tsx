@@ -16,13 +16,13 @@ const LOGO_PATH = 'https://raw.githubusercontent.com/Anu-Anu/Begu-Engeda/main/lo
 const GOLDEN_GRADIENT = "text-transparent bg-clip-text bg-gradient-to-r from-amber-600 via-yellow-400 to-amber-700 font-black drop-shadow-sm";
 const ZONES = ["Assosa Zone", "Kamashi Zone", "Metekel Zone", "Mao Komo Special Woreda", "Assosa City Administration", "Gilgel Beles City Administration"];
 
-// Updated Credentials based on user request
+// Fixed Credentials as requested
 const AUTHORIZED_ACCOUNTS: UserAccount[] = [
-  { username: 'police', phoneNumber: 'admin_p', password: '1234', role: UserRole.LOCAL_POLICE, isVerified: true, isProfileComplete: false },
-  { username: 'reception', phoneNumber: 'admin_r', password: '1234', role: UserRole.RECEPTION, isVerified: true, isProfileComplete: false }
+  { username: 'police', phoneNumber: '0900000000', password: '1234', role: UserRole.LOCAL_POLICE, isVerified: true, isProfileComplete: false },
+  { username: 'reception', phoneNumber: '0911111111', password: '1234', role: UserRole.RECEPTION, isVerified: true, isProfileComplete: false }
 ];
 
-// --- REFINED UI COMPONENTS ---
+// --- REFINED UI COMPONENTS (Moved outside for performance) ---
 
 const NavButton = ({ icon, label, active, onClick, count }: any) => (
   <button onClick={onClick} className={`w-full flex items-center gap-4 px-5 py-4 rounded-xl text-[11px] sm:text-xs font-black uppercase tracking-wide transition-all duration-200 group active:scale-[0.98]
@@ -41,7 +41,7 @@ const StandardInput = ({ label, value, onChange, type = "text", required, icon, 
       <input 
         type={type} 
         placeholder={placeholder}
-        className="w-full bg-slate-50 border-2 border-slate-200 rounded-lg pl-11 pr-4 py-3 text-sm font-semibold text-slate-900 focus:border-amber-500 focus:bg-white outline-none transition-all shadow-sm" 
+        className="w-full bg-slate-50 border-2 border-slate-200 rounded-lg pl-11 pr-4 py-3 text-sm font-semibold text-slate-900 focus:border-amber-500 focus:bg-white outline-none transition-all shadow-sm text-left" 
         value={value} 
         onChange={e => onChange(e.target.value)} 
         required={required}
@@ -57,11 +57,6 @@ export default function App() {
   const [currentUser, setCurrentUser] = useState<UserAccount | null>(() => {
     const saved = localStorage.getItem('begu_active_session');
     return saved ? JSON.parse(saved) : null;
-  });
-  
-  const [accounts, setAccounts] = useState<UserAccount[]>(() => {
-    const saved = localStorage.getItem('begu_accounts');
-    return saved ? JSON.parse(saved) : AUTHORIZED_ACCOUNTS;
   });
   
   const [guests, setGuests] = useState<Guest[]>(() => JSON.parse(localStorage.getItem('begu_guests') || '[]'));
@@ -91,7 +86,6 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    localStorage.setItem('begu_accounts', JSON.stringify(accounts));
     localStorage.setItem('begu_guests', JSON.stringify(guests));
     localStorage.setItem('begu_wanted', JSON.stringify(wanted));
     localStorage.setItem('begu_notifications', JSON.stringify(notifications));
@@ -99,21 +93,35 @@ export default function App() {
     localStorage.setItem('begu_currentPolice', JSON.stringify(policeProfile));
     if (currentUser) localStorage.setItem('begu_active_session', JSON.stringify(currentUser));
     else localStorage.removeItem('begu_active_session');
-  }, [accounts, guests, wanted, notifications, hotelProfile, policeProfile, currentUser]);
+  }, [guests, wanted, notifications, hotelProfile, policeProfile, currentUser]);
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
     if (!loginData.identifier || !loginData.password) return;
     setIsSyncing(true);
+    // Mimic API delay
     setTimeout(() => {
       setIsSyncing(false);
-      const acc = accounts.find(a => 
-        (a.username === loginData.identifier || a.phoneNumber === loginData.identifier) && 
+      const acc = AUTHORIZED_ACCOUNTS.find(a => 
+        (a.username === loginData.identifier.toLowerCase()) && 
         a.password === loginData.password
       );
       if (acc) {
-        setCurrentUser(acc);
-        setAuthState(!acc.isProfileComplete ? (acc.role === UserRole.RECEPTION ? 'setup_hotel' : 'setup_police') : 'authenticated');
+        // Load existing profile from storage if available
+        const savedHotel = JSON.parse(localStorage.getItem(`begu_hotel_${acc.username}`) || 'null');
+        const savedPolice = JSON.parse(localStorage.getItem(`begu_police_${acc.username}`) || 'null');
+        
+        if (savedHotel) setHotelProfile(savedHotel);
+        if (savedPolice) setPoliceProfile(savedPolice);
+
+        setCurrentUser({
+          ...acc,
+          isProfileComplete: acc.role === UserRole.RECEPTION ? !!savedHotel : !!savedPolice
+        });
+        
+        setAuthState(!(acc.role === UserRole.RECEPTION ? !!savedHotel : !!savedPolice) 
+          ? (acc.role === UserRole.RECEPTION ? 'setup_hotel' : 'setup_police') 
+          : 'authenticated');
       } else {
         alert(lang === 'am' ? "የተሳሳተ ተጠቃሚ ስም ወይም የይለፍ ቃል!" : "Invalid username or password!");
       }
@@ -131,9 +139,11 @@ export default function App() {
     e.preventDefault();
     const isComplete = type === 'hotel' ? (hotelProfile.name && hotelProfile.zone) : (policeProfile.name && policeProfile.zone);
     if (isComplete && currentUser) {
-      const updatedAcc = { ...currentUser, isProfileComplete: true };
-      setAccounts(accounts.map(a => a.username === currentUser.username ? updatedAcc : a));
-      setCurrentUser(updatedAcc);
+      const updatedUser = { ...currentUser, isProfileComplete: true };
+      setCurrentUser(updatedUser);
+      // Save profile specifically for this account
+      if (type === 'hotel') localStorage.setItem(`begu_hotel_${currentUser.username}`, JSON.stringify(hotelProfile));
+      else localStorage.setItem(`begu_police_${currentUser.username}`, JSON.stringify(policeProfile));
       setAuthState('authenticated');
     } else alert(lang === 'am' ? "እባክዎን ሁሉንም መረጃዎች ይሙሉ!" : "Please fill all details.");
   };
@@ -189,8 +199,8 @@ export default function App() {
           
           {authState === 'login' && (
             <form onSubmit={handleLogin} className="space-y-4">
-              <StandardInput label={t.username} value={loginData.identifier} onChange={(v:any) => setLoginData({...loginData, identifier: v})} required icon={<UserCircle size={16}/>} />
-              <StandardInput label={t.password} value={loginData.password} onChange={(v:any) => setLoginData({...loginData, password: v})} type="password" required icon={<Key size={16}/>} />
+              <StandardInput label={t.username} value={loginData.identifier} onChange={(v:any) => setLoginData({...loginData, identifier: v})} required icon={<UserCircle size={16}/>} placeholder="Username" />
+              <StandardInput label={t.password} value={loginData.password} onChange={(v:any) => setLoginData({...loginData, password: v})} type="password" required icon={<Key size={16}/>} placeholder="Password" />
               <button 
                 type="submit"
                 disabled={isSyncing || !loginData.identifier || !loginData.password} 
@@ -286,8 +296,8 @@ export default function App() {
              <button onClick={() => setLang(lang === 'am' ? 'en' : 'am')} className="p-2 bg-slate-50 border rounded-lg active:scale-95 transition-all"><Globe size={16} className="text-amber-600" /></button>
              <div className="flex items-center gap-2 px-3 py-1 bg-slate-50 border rounded-lg">
                 <div className="text-right hidden sm:block">
-                   <p className="text-[10px] font-black text-slate-900 uppercase truncate max-w-[80px]">{currentUser?.username}</p>
-                   <p className="text-[8px] text-amber-600 font-bold uppercase">{currentUser?.role}</p>
+                   <p className="text-[10px] font-black text-slate-900 uppercase truncate max-w-[80px] text-left">{currentUser?.username}</p>
+                   <p className="text-[8px] text-amber-600 font-bold uppercase text-left">{currentUser?.role}</p>
                 </div>
                 <div className="w-8 h-8 bg-slate-900 rounded flex items-center justify-center text-white font-black text-xs">{currentUser?.username[0].toUpperCase()}</div>
              </div>
@@ -324,8 +334,8 @@ export default function App() {
 
                 <div className="bg-white rounded-2xl shadow-lg border border-slate-100 overflow-hidden">
                   <div className="p-6 border-b bg-slate-50/30">
-                    <h3 className="text-lg font-black text-slate-900 uppercase">{t.fullTableRecord}</h3>
-                    <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest mt-0.5">Official Surveillance Feed</p>
+                    <h3 className="text-lg font-black text-slate-900 uppercase text-left">{t.fullTableRecord}</h3>
+                    <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest mt-0.5 text-left">Official Surveillance Feed</p>
                   </div>
                   <div className="overflow-x-auto">
                     <table className="w-full text-left whitespace-nowrap">
@@ -347,8 +357,8 @@ export default function App() {
                               </div>
                             </td>
                             <td className="px-6 py-4">
-                              <p className="font-black text-slate-900 mb-0.5">{g.fullName}</p>
-                              <div className="flex items-center gap-1.5 text-slate-400 text-[9px] font-bold">
+                              <p className="font-black text-slate-900 mb-0.5 text-left">{g.fullName}</p>
+                              <div className="flex items-center gap-1.5 text-slate-400 text-[9px] font-bold text-left">
                                 <Globe size={12}/> {g.nationality}
                               </div>
                             </td>
@@ -356,8 +366,8 @@ export default function App() {
                               <span className="px-3 py-1 bg-slate-100 rounded text-slate-900 font-black border border-slate-200 text-sm">#{g.roomNumber}</span>
                             </td>
                             <td className="px-6 py-4">
-                              <p className="text-slate-900 font-bold">{g.hotelName}</p>
-                              <p className="text-[9px] text-slate-400 mt-0.5 uppercase">{g.hotelZone}</p>
+                              <p className="text-slate-900 font-bold text-left">{g.hotelName}</p>
+                              <p className="text-[9px] text-slate-400 mt-0.5 uppercase text-left">{g.hotelZone}</p>
                             </td>
                             <td className="px-6 py-4 text-center">
                               {g.isWanted ? (
@@ -387,12 +397,12 @@ export default function App() {
                 <h3 className="text-lg font-black mb-6 uppercase text-center">{t.settings}</h3>
                 <div className="space-y-4">
                   <div className="p-5 bg-slate-50 rounded-xl border border-slate-200">
-                    <p className="text-[9px] font-black text-slate-400 uppercase mb-1">Active User</p>
-                    <p className="font-black text-slate-900">{currentUser?.username}</p>
-                    <p className="text-[10px] text-slate-500 mt-0.5">{currentUser?.role}</p>
+                    <p className="text-[9px] font-black text-slate-400 uppercase mb-1 text-left">Active User</p>
+                    <p className="font-black text-slate-900 text-left">{currentUser?.username}</p>
+                    <p className="text-[10px] text-slate-500 mt-0.5 text-left">{currentUser?.role}</p>
                   </div>
-                  <button onClick={() => alert("Synced!")} className="w-full py-3.5 bg-slate-900 hover:bg-slate-800 text-white font-black rounded-lg shadow-md transition-all uppercase text-[10px] tracking-widest flex items-center justify-center gap-2 active:scale-[0.98]">
-                    <Save size={14}/> Sync Profile
+                  <button onClick={() => alert("Profile Synced!")} className="w-full py-3.5 bg-slate-900 hover:bg-slate-800 text-white font-black rounded-lg shadow-md transition-all uppercase text-[10px] tracking-widest flex items-center justify-center gap-2 active:scale-[0.98]">
+                    <Save size={14}/> Sync Data
                   </button>
                 </div>
               </div>
@@ -417,8 +427,8 @@ function DashboardView({ t, guests, notifications, wanted, setView }: any) {
           <div key={s.l} className="bg-white p-6 rounded-2xl shadow-lg border border-slate-100 flex items-center justify-between group active:scale-[0.98] transition-all cursor-pointer overflow-hidden" 
             onClick={() => setView(s.l === t.guestList ? 'guestList' : s.l === t.wantedPersons ? 'wantedPersons' : 'notifications')}>
             <div>
-              <p className="text-[9px] font-black text-slate-400 uppercase mb-0.5">{s.l}</p>
-              <p className="text-3xl font-black text-slate-900">{s.v}</p>
+              <p className="text-[9px] font-black text-slate-400 uppercase mb-0.5 text-left">{s.l}</p>
+              <p className="text-3xl font-black text-slate-900 text-left">{s.v}</p>
             </div>
             <div className={`${s.c} w-10 h-10 rounded-lg flex items-center justify-center text-white shadow-md group-hover:rotate-6 transition-all`}>
               {s.icon}
@@ -429,8 +439,8 @@ function DashboardView({ t, guests, notifications, wanted, setView }: any) {
       
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="bg-white p-6 rounded-2xl shadow-lg border border-slate-100 h-[300px] flex flex-col">
-          <h4 className="font-black text-slate-900 uppercase mb-6 text-[10px] flex items-center gap-2">
-            <TrendingUp size={14} className="text-indigo-600"/> Trends
+          <h4 className="font-black text-slate-900 uppercase mb-6 text-[10px] flex items-center gap-2 text-left">
+            <TrendingUp size={14} className="text-indigo-600"/> Surveillance Stats
           </h4>
           <div className="flex-1">
             <ResponsiveContainer width="100%" height="100%">
@@ -445,20 +455,20 @@ function DashboardView({ t, guests, notifications, wanted, setView }: any) {
           </div>
         </div>
         <div className="bg-white p-6 rounded-2xl shadow-lg border border-slate-100 flex flex-col h-[300px]">
-          <h4 className="font-black text-slate-900 uppercase mb-6 text-[10px] flex items-center gap-2">
-            <Activity size={14} className="text-emerald-500"/> Live Logs
+          <h4 className="font-black text-slate-900 uppercase mb-6 text-[10px] flex items-center gap-2 text-left">
+            <Activity size={14} className="text-emerald-500"/> Activity Feed
           </h4>
           <div className="flex-1 overflow-y-auto custom-scrollbar">
             <table className="w-full text-left text-[10px] font-bold uppercase">
               <thead className="bg-slate-50 text-slate-400 sticky top-0">
-                <tr><th className="p-2">Name</th><th className="p-2">Feed</th></tr>
+                <tr><th className="p-2">Name</th><th className="p-2">Status</th></tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {guests.slice(0, 8).map(g => (
                   <tr key={g.id} className="hover:bg-slate-50">
-                    <td className="p-2 text-slate-800 font-black truncate max-w-[120px]">{g.fullName}</td>
-                    <td className="p-2">
-                      {g.isWanted ? <span className="text-red-600">ALERT</span> : <span className="text-emerald-600">CLEAR</span>}
+                    <td className="p-2 text-slate-800 font-black truncate max-w-[120px] text-left">{g.fullName}</td>
+                    <td className="p-2 text-left">
+                      {g.isWanted ? <span className="text-red-600">ALERT</span> : <span className="text-emerald-600">SECURE</span>}
                     </td>
                   </tr>
                 ))}
@@ -485,16 +495,16 @@ function GuestEntryForm({ onSubmit, newGuest, setNewGuest, t }: any) {
 
   return (
     <div className="max-w-xl mx-auto bg-white p-8 rounded-[2rem] shadow-xl border border-slate-100">
-      <h3 className="text-xl font-black mb-8 flex items-center gap-3 uppercase"><UserPlus size={24} className="text-indigo-600" /> {t.registerGuest}</h3>
+      <h3 className="text-xl font-black mb-8 flex items-center gap-3 uppercase text-left"><UserPlus size={24} className="text-indigo-600" /> {t.registerGuest}</h3>
       <form onSubmit={onSubmit} className="space-y-4">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <StandardInput label={t.fullName} value={newGuest.fullName} onChange={(v: string) => setNewGuest({...newGuest, fullName: v})} required icon={<Users size={16}/>} placeholder="Full Judicial Name" />
-          <StandardInput label={t.nationality} value={newGuest.nationality} onChange={(v: string) => setNewGuest({...newGuest, nationality: v})} required icon={<Globe size={16}/>} placeholder="Country" />
+          <StandardInput label={t.fullName} value={newGuest.fullName} onChange={(v: string) => setNewGuest({...newGuest, fullName: v})} required icon={<Users size={16}/>} placeholder="Full Name" />
+          <StandardInput label={t.nationality} value={newGuest.nationality} onChange={(v: string) => setNewGuest({...newGuest, nationality: v})} required icon={<Globe size={16}/>} placeholder="Nationality" />
         </div>
-        <StandardInput label={t.roomNumber} value={newGuest.roomNumber} onChange={(v: string) => setNewGuest({...newGuest, roomNumber: v})} required icon={<Plus size={16}/>} placeholder="Room #" />
+        <StandardInput label={t.roomNumber} value={newGuest.roomNumber} onChange={(v: string) => setNewGuest({...newGuest, roomNumber: v})} required icon={<Plus size={16}/>} placeholder="Bed ID #" />
         
         <div className="space-y-2">
-          <label className="text-[10px] font-black text-slate-500 uppercase ml-1">{t.idPhoto}</label>
+          <label className="text-[10px] font-black text-slate-500 uppercase ml-1 text-left">{t.idPhoto}</label>
           <div className="p-8 bg-slate-50 border-2 border-dashed border-slate-200 rounded-xl text-center cursor-pointer hover:bg-white hover:border-indigo-400 transition-all active:scale-[0.99] group" onClick={() => document.getElementById('idUpload')?.click()}>
             <Camera size={28} className="mx-auto mb-2 text-slate-300 group-hover:text-indigo-500" />
             <p className="text-[10px] font-black uppercase text-slate-400 tracking-wider">{t.capturePhoto}</p>
@@ -525,12 +535,12 @@ function AppUtility({ t }: any) {
   return (
     <div className="bg-white p-10 rounded-[3rem] shadow-xl border border-slate-100 text-center max-w-3xl mx-auto">
       <img src={LOGO_PATH} className="w-20 h-20 mx-auto mb-6 opacity-30" />
-      <h3 className={`text-2xl leading-tight mb-6 ${GOLDEN_GRADIENT}`}>{t.appUtility}</h3>
+      <h3 className={`text-2xl leading-tight mb-6 ${GOLDEN_GRADIENT} text-center`}>{t.appUtility}</h3>
       <p className="text-slate-700 font-bold leading-relaxed text-base sm:text-lg text-justify border-l-4 border-amber-400 pl-6 py-2 bg-slate-50/50 rounded-r-2xl">
         {t.utilityText}
       </p>
       <div className="mt-12 pt-6 border-t border-slate-100">
-        <p className="text-slate-400 font-bold uppercase text-[9px] tracking-[4px]">{t.developerCredit}</p>
+        <p className="text-slate-400 font-bold uppercase text-[9px] tracking-[4px] text-center">{t.developerCredit}</p>
       </div>
     </div>
   );
@@ -540,16 +550,16 @@ function NotificationsFeed({ notifications, t, setView }: any) {
   return (
     <div className="max-w-3xl mx-auto space-y-4">
       {notifications.map((n: any) => (
-        <div key={n.id} className={`p-6 bg-white border-l-[8px] rounded-xl shadow-md flex gap-5 transition-all
+        <div key={n.id} className={`p-6 bg-white border-l-[8px] rounded-xl shadow-md flex gap-5 transition-all text-left
           ${n.type === 'danger' ? 'border-red-600 bg-red-50/20' : 'border-indigo-600'}`}>
           <div className={`w-12 h-12 rounded-xl shadow-md flex-shrink-0 flex items-center justify-center 
             ${n.type === 'danger' ? 'bg-red-600 text-white' : 'bg-indigo-600 text-white'}`}>
             <ShieldAlert size={20}/>
           </div>
           <div className="flex-1">
-            <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1 inline-block">{n.timestamp}</span>
-            <h4 className="text-base font-black uppercase text-slate-900 mb-1">{n.title}</h4>
-            <p className="text-xs font-bold text-slate-600 opacity-80">{n.message}</p>
+            <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1 inline-block text-left">{n.timestamp}</span>
+            <h4 className="text-base font-black uppercase text-slate-900 mb-1 text-left">{n.title}</h4>
+            <p className="text-xs font-bold text-slate-600 opacity-80 text-left">{n.message}</p>
             {n.guestId && (
               <button onClick={() => setView('guestList')} className="mt-3 px-5 py-2 bg-red-600 active:scale-95 text-white text-[9px] font-black uppercase rounded shadow transition-all">Review Records</button>
             )}
@@ -559,7 +569,7 @@ function NotificationsFeed({ notifications, t, setView }: any) {
       {notifications.length === 0 && (
         <div className="text-center py-32 opacity-20">
           <ShieldCheck size={80} className="mx-auto mb-4 text-slate-300" />
-          <h3 className="text-base font-black uppercase tracking-widest text-slate-400">All Systems Operational</h3>
+          <h3 className="text-base font-black uppercase tracking-widest text-slate-400 text-center">Security Online</h3>
         </div>
       )}
     </div>
