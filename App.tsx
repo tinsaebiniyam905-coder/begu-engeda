@@ -59,11 +59,10 @@ export default function App() {
   const [view, setView] = useState<string>('dashboard');
   const [isSyncing, setIsSyncing] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
-  const [zoomImg, setZoomImg] = useState<string | null>(null);
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-
+  
   const [hotelProfile, setHotelProfile] = useState<HotelProfile>(() => JSON.parse(localStorage.getItem('begu_hotel_profile') || '{"name":"","address":"","zone":"","receptionistName":"","phoneNumber":""}'));
   const [policeProfile, setPoliceProfile] = useState<PoliceProfile>(() => JSON.parse(localStorage.getItem('begu_police_profile') || '{"name":"","address":"","zone":""}'));
+  const [newGuest, setNewGuest] = useState({ fullName: '', nationality: '', roomNumber: '', idPhoto: '' });
 
   const t = translations[lang];
 
@@ -71,20 +70,19 @@ export default function App() {
   useEffect(() => {
     if (!currentUser) return;
 
+    // Listen for Guests - በአንድ ስልክ የተመዘገበው ሌላው ላይ እንዲታይ የሚያደርገው ዋናው ኮድ
     const guestsRef = ref(db, 'guests');
-    const wantedRef = ref(db, 'wanted_persons');
-    const notifyRef = ref(db, 'notifications');
-
-    // Listen for Guests
     const unsubGuests = onValue(guestsRef, (snapshot) => {
       const data = snapshot.val();
       if (data) {
         const list = Object.keys(data).map(key => ({ id: key, ...data[key] }));
-        setGuests(list.reverse());
+        setGuests(list.reverse()); // አዲሱ መረጃ ከላይ እንዲሆን
+      } else {
+        setGuests([]);
       }
     });
 
-    // Listen for Wanted Persons
+    const wantedRef = ref(db, 'wanted_persons');
     const unsubWanted = onValue(wantedRef, (snapshot) => {
       const data = snapshot.val();
       if (data) {
@@ -93,7 +91,7 @@ export default function App() {
       }
     });
 
-    // Listen for Notifications
+    const notifyRef = ref(db, 'notifications');
     const unsubNotify = onValue(notifyRef, (snapshot) => {
       const data = snapshot.val();
       if (data) {
@@ -102,7 +100,11 @@ export default function App() {
       }
     });
 
-    return () => { unsubGuests(); unsubWanted(); unsubNotify(); };
+    return () => { 
+      unsubGuests(); 
+      unsubWanted(); 
+      unsubNotify(); 
+    };
   }, [currentUser]);
 
   // --- 2. CLOUD SAVE: REGISTER GUEST TO FIREBASE ---
@@ -111,12 +113,14 @@ export default function App() {
     if (!newGuest.fullName || !newGuest.nationality) return;
 
     setIsSyncing(true);
+    const isWantedHit = wanted.some(w => w.fullName.toLowerCase() === newGuest.fullName.toLowerCase());
+    
     const guestData = {
       ...newGuest,
       hotelName: hotelProfile.name,
       hotelZone: hotelProfile.zone,
       checkInDate: new Date().toISOString(),
-      isWanted: wanted.some(w => w.fullName.toLowerCase() === newGuest.fullName.toLowerCase()),
+      isWanted: isWantedHit,
       device: window.innerWidth < 768 ? 'Mobile' : 'Desktop'
     };
 
@@ -124,7 +128,7 @@ export default function App() {
       const newGuestRef = push(ref(db, 'guests'));
       await set(newGuestRef, guestData);
 
-      if (guestData.isWanted) {
+      if (isWantedHit) {
         const notifyRef = push(ref(db, 'notifications'));
         await set(notifyRef, {
           title: t.alertWantedFound,
@@ -137,14 +141,13 @@ export default function App() {
 
       setNewGuest({ fullName: '', nationality: '', roomNumber: '', idPhoto: '' });
       setView('guestList');
+      alert("መረጃው በደመናው ላይ ተቀምጧል!");
     } catch (err) {
-      alert("Error syncing with Cloud!");
+      alert("Error syncing with Cloud: " + err);
     } finally {
       setIsSyncing(false);
     }
   };
-
-  const [newGuest, setNewGuest] = useState({ fullName: '', nationality: '', roomNumber: '', idPhoto: '' });
 
   // --- LOGIN & SETUP LOGIC ---
   const handleLogin = (e: React.FormEvent) => {
@@ -175,38 +178,13 @@ export default function App() {
 
   const filteredGuests = useMemo(() => {
     let list = guests;
-    if (currentUser?.role === UserRole.LOCAL_POLICE) list = guests.filter(g => g.hotelZone === policeProfile.zone);
-    else if (currentUser?.role === UserRole.RECEPTION) list = guests.filter(g => g.hotelName === hotelProfile.name);
+    if (currentUser?.role === UserRole.LOCAL_POLICE) {
+      list = guests.filter(g => g.hotelZone === policeProfile.zone);
+    } else if (currentUser?.role === UserRole.RECEPTION) {
+      list = guests.filter(g => g.hotelName === hotelProfile.name);
+    }
     return list.filter(g => g.fullName.toLowerCase().includes(searchTerm.toLowerCase()));
   }, [guests, searchTerm, currentUser, policeProfile, hotelProfile]);
-
-  if (authState !== 'authenticated' && authState !== 'login') {
-      // Simple Setup View
-      return (
-        <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4">
-            <div className="bg-white p-8 rounded-3xl w-full max-w-md">
-                <h2 className="text-xl font-black mb-4 uppercase">{authState === 'setup_hotel' ? t.setupHotel : t.setupPolice}</h2>
-                <form onSubmit={(e) => { e.preventDefault(); setAuthState('authenticated'); }} className="space-y-4">
-                    {authState === 'setup_hotel' ? (
-                        <>
-                            <StandardInput label={t.hotel} value={hotelProfile.name} onChange={(v:any) => setHotelProfile({...hotelProfile, name: v})} icon={<Building2 size={16}/>} />
-                            <select className="w-full p-3 border-2 rounded-lg" onChange={(e) => setHotelProfile({...hotelProfile, zone: e.target.value})} required>
-                                <option value="">Select Zone</option>
-                                {ZONES_AM.map(z => <option key={z} value={z}>{z}</option>)}
-                            </select>
-                        </>
-                    ) : (
-                        <select className="w-full p-4 border-2 rounded-lg font-bold" onChange={(e) => setPoliceProfile({...policeProfile, zone: e.target.value})} required>
-                            <option value="">Select Assigned Zone</option>
-                            {ZONES_AM.map(z => <option key={z} value={z}>{z}</option>)}
-                        </select>
-                    )}
-                    <button type="submit" className="w-full bg-slate-900 text-white p-4 rounded-xl font-black uppercase">Start System</button>
-                </form>
-            </div>
-        </div>
-      )
-  }
 
   if (authState === 'login') {
     return (
@@ -220,12 +198,38 @@ export default function App() {
                 <button className="w-full bg-slate-900 text-white p-4 rounded-xl font-black uppercase mt-6">Login</button>
             </form>
         </div>
-    )
+    );
+  }
+
+  if (authState !== 'authenticated') {
+      return (
+        <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4">
+            <div className="bg-white p-8 rounded-3xl w-full max-w-md">
+                <h2 className="text-xl font-black mb-4 uppercase">{authState === 'setup_hotel' ? t.setupHotel : t.setupPolice}</h2>
+                <form onSubmit={(e) => { e.preventDefault(); setAuthState('authenticated'); }} className="space-y-4">
+                    {authState === 'setup_hotel' ? (
+                        <>
+                            <StandardInput label={t.hotel} value={hotelProfile.name} onChange={(v:any) => setHotelProfile({...hotelProfile, name: v})} icon={<Building2 size={16}/>} />
+                            <select className="w-full p-3 border-2 rounded-lg" value={hotelProfile.zone} onChange={(e) => setHotelProfile({...hotelProfile, zone: e.target.value})} required>
+                                <option value="">Select Zone</option>
+                                {ZONES_AM.map(z => <option key={z} value={z}>{z}</option>)}
+                            </select>
+                        </>
+                    ) : (
+                        <select className="w-full p-4 border-2 rounded-lg font-bold" value={policeProfile.zone} onChange={(e) => setPoliceProfile({...policeProfile, zone: e.target.value})} required>
+                            <option value="">Select Assigned Zone</option>
+                            {ZONES_AM.map(z => <option key={z} value={z}>{z}</option>)}
+                        </select>
+                    )}
+                    <button type="submit" className="w-full bg-slate-900 text-white p-4 rounded-xl font-black uppercase">Start System</button>
+                </form>
+            </div>
+        </div>
+      );
   }
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] flex flex-col md:flex-row font-sans">
-      {/* Sidebar */}
       <aside className="w-64 bg-[#0F172A] text-white p-6 hidden md:flex flex-col">
         <h2 className={`text-lg mb-10 ${GOLDEN_GRADIENT}`}>{t.appName}</h2>
         <nav className="space-y-2 flex-1">
@@ -241,7 +245,6 @@ export default function App() {
         </button>
       </aside>
 
-      {/* Main Content */}
       <main className="flex-1 h-screen overflow-y-auto p-4 sm:p-8">
         <header className="flex justify-between items-center mb-8 bg-white p-4 rounded-2xl shadow-sm border">
             <h3 className="font-black uppercase text-slate-800">{t[view] || view}</h3>
@@ -259,17 +262,17 @@ export default function App() {
             <div className="bg-white p-6 rounded-3xl border shadow-sm">
                 <Users className="text-indigo-500 mb-2" />
                 <h4 className="text-3xl font-black">{guests.length}</h4>
-                <p className="text-xs text-slate-400 uppercase font-bold">Total Guests Recorded</p>
+                <p className="text-xs text-slate-400 uppercase font-bold">Total Guests</p>
             </div>
             <div className="bg-white p-6 rounded-3xl border shadow-sm">
                 <AlertTriangle className="text-red-500 mb-2" />
                 <h4 className="text-3xl font-black">{guests.filter(g => g.isWanted).length}</h4>
-                <p className="text-xs text-slate-400 uppercase font-bold">Wanted Hits Detected</p>
+                <p className="text-xs text-slate-400 uppercase font-bold">Wanted Found</p>
             </div>
             <div className="bg-white p-6 rounded-3xl border shadow-sm">
                 <Wifi className="text-emerald-500 mb-2" />
-                <h4 className="text-3xl font-black">Active</h4>
-                <p className="text-xs text-slate-400 uppercase font-bold">Cloud Sync Status</p>
+                <h4 className="text-3xl font-black">Online</h4>
+                <p className="text-xs text-slate-400 uppercase font-bold">Sync Active</p>
             </div>
           </div>
         )}
@@ -289,6 +292,14 @@ export default function App() {
 
         {view === 'guestList' && (
             <div className="bg-white rounded-3xl shadow-sm border overflow-hidden">
+                <div className="p-4 border-b">
+                   <input 
+                      type="text" 
+                      placeholder="Search Guest..." 
+                      className="w-full p-2 bg-slate-50 border rounded-lg outline-none"
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                   />
+                </div>
                 <table className="w-full text-left">
                     <thead className="bg-slate-50 text-[10px] font-black uppercase text-slate-500">
                         <tr>
