@@ -1,4 +1,3 @@
-
 import { Language } from './types';
 
 export const translations = {
@@ -6,7 +5,7 @@ export const translations = {
     appName: "ቤጉ እንግዳ",
     developedBy: "ቤንሻንጉል ጉምዝ ክልል ፖሊስ ኮሚሽን",
     motto: "በጀግንነት መጠበቅ በሰብዓዊነት ማገልገል",
-    developerCredit: "በምክትል ኢንስፔክተር ቢኒያም ይርሳዉ መጢና የተዘጋጀ",
+    developerCredit: "የተዘጋጀዉ በቤንሻንጉል ጉምዝ ክልል ፖሊስ ኮሚሽን ኢንፎረሜሽን እና ቴክኖሎጂ ዳሬክቶሬት",
     login: "ይግቡ",
     username: "ተጠቃሚ ስም",
     password: "የይለፍ ቃል",
@@ -49,13 +48,18 @@ export const translations = {
     setupWelcome: "እንኳን ወደ ሲስተሙ በደህና መጡ! እባክዎን መጀመሪያ የሆቴልዎን መረጃ ይሙሉ",
     hotelDirectory: "የሆቴሎች ዝርዝር",
     appUtility: "የአፕልኬሽኑ አስፈላጊነት",
-    utilityText: "ይህ አፕልኬሽን በቤንሻንጉል ጉምዝ ክልል ፖሊስ ኮሚሽን በምክትል ኢንስፔክተር ቢኒያም ይርሳዉ መጢና የተዘጋጀ ሲሆን ዋና አላማዉ በክልሉ ዉስጥ ያሉ ሆቴሎች እንግዶችን በዘመናዊ መንገድ መመዝገብ እና መረጃዉን በየደረጃዉ ላለ ፖሊስ ማስተላለፍ ነዉ። ይህም የወንጀል መከላከያ እና ክትትል ስራን በከፍተኛ ደረጃ ያሳልጣል።"
+    utilityText: "ይህ አፕልኬሽን በቤንሻንጉል ጉምዝ ክልል ፖሊስ ኮሚሽን ኢንፎረሜሽን እና ቴክኖሎጂ ዳሬክቶሬት የተዘጋጀ ሲሆን ዋና አላማዉ በክልሉ ዉስጥ ያሉ ሆቴሎች እንግዶችን በዘመናዊ መንገድ መመዝገብ እና መረጃዉን በየደረጃዉ ላለ ፖሊስ ማስተላለፍ ነዉ። ይህም የወንጀል መከላከያ እና ክትትል ስራን በከፍተኛ ደረጃ ያሳልጣል። ምክትል ኢንስፔክተር ቢኒያም ይርሳዉ መጢናም ዋና አበልጻጊ ናቸዉ።",
+    confirmJurisdiction: "የስራ ቦታ አድራሻዎን ያረጋግጡ",
+    jurisdictionWarning: "አንዴ ካረጋገጡ በኋላ መቀየር አይቻልም! ሪፖርቶች የሚደርሱዎት በዚህ አድራሻ መሰረት ብቻ ነዉ።",
+    confirmBtn: "አረጋግጣለሁ",
+    selectJurisdiction: "የስራ ቦታ ይምረጡ",
+    assignedJurisdiction: "የተመደበ የስራ ቦታ"
   },
   en: {
     appName: "Begu Engeda",
     developedBy: "Benishangul Gumuz Region Police Commission",
     motto: "Protect with Heroism, Serve with Humanity",
-    developerCredit: "Developed by Deputy Inspector Biniyam Yirsaw Metina",
+    developerCredit: "Developed by Benishangul Gumuz Region Police Commission Information and Technology Directorate",
     login: "Login",
     username: "Username",
     password: "Password",
@@ -98,6 +102,11 @@ export const translations = {
     setupWelcome: "Welcome! Please fill in your hotel details before proceeding",
     hotelDirectory: "Hotel Directory",
     appUtility: "App Utility & Purpose",
-    utilityText: "Developed by Deputy Inspector Biniyam Yirsaw Metina for Benishangul Gumuz Police Commission. This system enables secure, real-time hotel guest monitoring and crime prevention. All data is routed to relevant local and regional police authorities for immediate action."
+    utilityText: "Developed by Benishangul Gumuz Region Police Commission Information and Technology Directorate (Lead: Deputy Inspector Biniyam Yirsaw Metina). This system enables secure, real-time hotel guest monitoring and crime prevention. All data is routed to relevant local and regional police authorities for immediate action.",
+    confirmJurisdiction: "Confirm Your Jurisdiction",
+    jurisdictionWarning: "Once confirmed, this cannot be changed! You will only receive reports from hotels in this specific area.",
+    confirmBtn: "Confirm Assignment",
+    selectJurisdiction: "Select Command Post",
+    assignedJurisdiction: "Assigned Jurisdiction"
   }
 };
