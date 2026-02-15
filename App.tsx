@@ -6,10 +6,10 @@ import {
   Users, UserPlus, AlertTriangle, FileText, LogOut, Bell, Camera, Image as ImageIcon, Download, 
   Printer, Globe, Plus, Settings, Edit, X, Maximize2, CheckCircle2, ShieldCheck, Search, MapPin, 
   Building2, FileBarChart, Menu, Info, ChevronRight, ShieldAlert, History, TrendingUp, Activity, 
-  Phone, Fingerprint, Map, Share2, Send, ExternalLink, Lock, DownloadCloud, RefreshCw, Radio
+  Phone, Fingerprint, Map, LayoutDashboard, Save
 } from 'lucide-react';
 import { 
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend
 } from 'recharts';
 
 const INITIAL_WANTED: WantedPerson[] = [
@@ -32,7 +32,7 @@ const GOLDEN_GRADIENT = "text-transparent bg-clip-text bg-gradient-to-r from-amb
 
 export default function App() {
   const [lang, setLang] = useState<Language>('am');
-  const [user, setUser] = useState<{ role: UserRole; username: string; zone?: string; isConfirmed?: boolean } | null>(null);
+  const [user, setUser] = useState<{ role: UserRole; username: string; zone?: string } | null>(null);
   const [guests, setGuests] = useState<Guest[]>(() => JSON.parse(localStorage.getItem('guests') || '[]'));
   const [wanted, setWanted] = useState<WantedPerson[]>(() => JSON.parse(localStorage.getItem('wanted') || JSON.stringify(INITIAL_WANTED)));
   const [notifications, setNotifications] = useState<Notification[]>(() => JSON.parse(localStorage.getItem('notifications') || '[]'));
@@ -41,62 +41,16 @@ export default function App() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [zoomImg, setZoomImg] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
-  const [isSyncing, setIsSyncing] = useState(false);
   
-  // Define missing state for new guest registration
-  const [newGuest, setNewGuest] = useState({ fullName: '', nationality: '', roomNumber: '', idPhoto: '' });
-  // Define missing state for new wanted person registration
-  const [newWanted, setNewWanted] = useState({ fullName: '', crime: '', description: '', photo: '' });
-
   const [allHotels, setAllHotels] = useState<HotelProfile[]>(() => JSON.parse(localStorage.getItem('allHotels') || '[]'));
   const [hotelProfile, setHotelProfile] = useState<HotelProfile>(() => JSON.parse(localStorage.getItem('currentHotel') || '{"name":"","address":"","zone":"","receptionistName":"","phoneNumber":""}'));
 
   const t = translations[lang];
 
-  // --- Real-time Sync Logic (BroadcastChannel) ---
-  // This ensures that if the app is open in multiple tabs (e.g. Reception in one, Police in another), 
-  // data "reaches" the police instantly.
-  useEffect(() => {
-    const syncChannel = new BroadcastChannel('begu_engeda_global_sync');
-    
-    syncChannel.onmessage = (event) => {
-      const { type, data } = event.data;
-      switch (type) {
-        case 'SYNC_GUESTS': setGuests(data); break;
-        case 'SYNC_NOTIFICATIONS': setNotifications(data); break;
-        case 'SYNC_WANTED': setWanted(data); break;
-        case 'SYNC_HOTELS': setAllHotels(data); break;
-      }
-    };
-
-    return () => syncChannel.close();
-  }, []);
-
-  const broadcast = (type: string, data: any) => {
-    const syncChannel = new BroadcastChannel('begu_engeda_global_sync');
-    syncChannel.postMessage({ type, data });
-  };
-
-  useEffect(() => {
-    localStorage.setItem('guests', JSON.stringify(guests));
-    broadcast('SYNC_GUESTS', guests);
-  }, [guests]);
-
-  useEffect(() => {
-    localStorage.setItem('wanted', JSON.stringify(wanted));
-    broadcast('SYNC_WANTED', wanted);
-  }, [wanted]);
-
-  useEffect(() => {
-    localStorage.setItem('notifications', JSON.stringify(notifications));
-    broadcast('SYNC_NOTIFICATIONS', notifications);
-  }, [notifications]);
-
-  useEffect(() => {
-    localStorage.setItem('allHotels', JSON.stringify(allHotels));
-    broadcast('SYNC_HOTELS', allHotels);
-  }, [allHotels]);
-
+  useEffect(() => localStorage.setItem('guests', JSON.stringify(guests)), [guests]);
+  useEffect(() => localStorage.setItem('wanted', JSON.stringify(wanted)), [wanted]);
+  useEffect(() => localStorage.setItem('notifications', JSON.stringify(notifications)), [notifications]);
+  useEffect(() => localStorage.setItem('allHotels', JSON.stringify(allHotels)), [allHotels]);
   useEffect(() => localStorage.setItem('currentHotel', JSON.stringify(hotelProfile)), [hotelProfile]);
 
   const handleLogin = (e: React.FormEvent) => {
@@ -105,12 +59,10 @@ export default function App() {
       setUser({ role: UserRole.RECEPTION, username: 'reception' });
       setView('setupHotel');
     } else if (loginData.username === 'police' && loginData.password === '1234') {
-      const savedZone = localStorage.getItem('police_jurisdiction');
-      const isConfirmed = localStorage.getItem('police_jurisdiction_confirmed') === 'true';
-      setUser({ role: UserRole.LOCAL_POLICE, username: 'police', zone: savedZone || undefined, isConfirmed });
-      setView(isConfirmed ? 'dashboard' : 'setupPolice');
+      setUser({ role: UserRole.LOCAL_POLICE, username: 'police' });
+      setView('setupPolice');
     } else if (loginData.username === 'police' && loginData.password === 'police@1234') {
-      setUser({ role: UserRole.SUPER_POLICE, username: 'police_hq', isConfirmed: true });
+      setUser({ role: UserRole.SUPER_POLICE, username: 'police_hq' });
       setView('dashboard');
     } else alert('Invalid credentials / የተሳሳተ መረጃ');
   };
@@ -128,848 +80,689 @@ export default function App() {
     } else alert("Fill all details / ሁሉንም ይሙሉ");
   };
 
-  // Define missing file upload handler
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>, type: 'guest' | 'wanted') => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        if (type === 'guest') setNewGuest(prev => ({ ...prev, idPhoto: reader.result as string }));
-        else setNewWanted(prev => ({ ...prev, photo: reader.result as string }));
-      };
-      reader.readAsDataURL(file);
-    }
-  };
-
-  // Define missing addWanted handler
-  const addWanted = (e: React.FormEvent) => {
-    e.preventDefault();
-    const w: WantedPerson = {
-      ...newWanted,
-      id: Date.now().toString(),
-      postedDate: new Date().toISOString().split('T')[0]
-    };
-    setWanted([w, ...wanted]);
-    setNewWanted({ fullName: '', crime: '', description: '', photo: '' });
-    setView('dashboard');
-  };
+  const [newGuest, setNewGuest] = useState({ fullName: '', nationality: '', roomNumber: '', idPhoto: '' });
+  const [newWanted, setNewWanted] = useState({ fullName: '', photo: '', description: '', crime: '' });
 
   const saveGuest = (e: React.FormEvent) => {
     e.preventDefault();
-    setIsSyncing(true);
-    
-    // Transmitting to "Central Police Receiving System"
-    setTimeout(() => {
-      const isWanted = wanted.some(w => w.fullName.toLowerCase().trim() === newGuest.fullName.toLowerCase().trim());
-      const guest: Guest = {
-        ...newGuest,
-        id: Math.random().toString(36).substr(2, 9),
-        hotelId: hotelProfile.id,
-        hotelName: hotelProfile.name,
-        hotelAddress: hotelProfile.address,
-        hotelZone: hotelProfile.zone,
-        receptionistName: hotelProfile.receptionistName,
-        receptionistPhone: hotelProfile.phoneNumber,
-        checkInDate: new Date().toISOString().split('T')[0],
-        isWanted
-      };
-      setGuests([guest, ...guests]);
-      
-      // CRITICAL: Auto-Alert for Police Receiving
-      const newReport: Notification = {
+    const isWanted = wanted.some(w => w.fullName.toLowerCase().trim() === newGuest.fullName.toLowerCase().trim());
+    const guest: Guest = {
+      ...newGuest,
+      id: Math.random().toString(36).substr(2, 9),
+      hotelId: hotelProfile.id,
+      hotelName: hotelProfile.name,
+      hotelAddress: hotelProfile.address,
+      hotelZone: hotelProfile.zone,
+      receptionistName: hotelProfile.receptionistName,
+      receptionistPhone: hotelProfile.phoneNumber,
+      checkInDate: new Date().toISOString().split('T')[0],
+      isWanted
+    };
+    setGuests([guest, ...guests]);
+    if (isWanted) {
+      const notif: Notification = {
         id: Date.now().toString(),
-        title: isWanted ? 'ተፈላጊ ግለሰብ ተገኝቷል! / WANTED DETECTED' : 'እንግዳ ተመዝግቧል / New Guest Entry',
-        message: isWanted 
-          ? `ተፈላጊዉ ${guest.fullName} ${guest.hotelName} ሆቴል በአልጋ ቁጥር ${guest.roomNumber} ተመዝግቧል። / Wanted person ${guest.fullName} registered at ${guest.hotelName} Room ${guest.roomNumber}.` 
-          : `${guest.fullName} (${guest.nationality}) registered at ${guest.hotelName}, Room ${guest.roomNumber}.`,
-        type: isWanted ? 'danger' : 'info',
+        title: t.alertWantedFound,
+        message: `${guest.fullName} at ${guest.hotelName}, Room ${guest.roomNumber}. (${guest.hotelZone})`,
+        type: 'danger',
         timestamp: new Date().toLocaleTimeString(),
         targetZone: guest.hotelZone,
         guestId: guest.id
       };
-      setNotifications([newReport, ...notifications]);
+      setNotifications([notif, ...notifications]);
+    }
+    setNewGuest({ fullName: '', nationality: '', roomNumber: '', idPhoto: '' });
+    setView('guestList');
+  };
 
-      setIsSyncing(false);
-      if (isWanted) alert(t.alertWantedFound + " - " + guest.fullName);
-      setNewGuest({ fullName: '', nationality: '', roomNumber: '', idPhoto: '' });
-      setView('guestList');
-    }, 1200);
+  const addWanted = (e: React.FormEvent) => {
+    e.preventDefault();
+    const person: WantedPerson = {
+      ...newWanted,
+      id: Math.random().toString(36).substr(2, 9),
+      postedDate: new Date().toISOString().split('T')[0]
+    };
+    setWanted([person, ...wanted]);
+    setNewWanted({ fullName: '', photo: '', description: '', crime: '' });
+    setView('dashboard');
+  };
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>, type: 'guest' | 'wanted' | 'hotel') => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const base64 = reader.result as string;
+        if (type === 'guest') setNewGuest(prev => ({ ...prev, idPhoto: base64 }));
+        else if (type === 'wanted') setNewWanted(prev => ({ ...prev, photo: base64 }));
+        else if (type === 'hotel') setHotelProfile(prev => ({ ...prev, digitalIdPhoto: base64 }));
+      };
+      reader.readAsDataURL(file);
+    }
   };
 
   const visibleGuests = useMemo(() => {
     let list = guests;
     if (user?.role === UserRole.LOCAL_POLICE && user.zone) {
       list = guests.filter(g => g.hotelZone === user.zone);
-    } else if (user?.role === UserRole.RECEPTION) {
-      list = guests.filter(g => g.hotelId === hotelProfile.id);
     }
     return list.filter(g => g.fullName.toLowerCase().includes(searchTerm.toLowerCase()));
-  }, [guests, user, searchTerm, hotelProfile.id]);
+  }, [guests, user, searchTerm]);
 
-  const filteredNotifications = useMemo(() => {
-    if (user?.role === UserRole.SUPER_POLICE) return notifications;
-    if (user?.role === UserRole.LOCAL_POLICE && user.zone) {
-      return notifications.filter(n => n.targetZone === user.zone);
-    }
-    return [];
-  }, [notifications, user]);
-
-  const handleShare = (guest: Guest, platform: 'telegram' | 'whatsapp') => {
-    const text = `*ቤጉ እንግዳ ፖሊስ መረጃ*\n\nስም: ${guest.fullName}\nዜግነት: ${guest.nationality}\nሆቴል: ${guest.hotelName}\nአድራሻ: ${guest.hotelZone}\nአልጋ ቁጥር: ${guest.roomNumber}\nቀን: ${guest.checkInDate}\nሁኔታ: ${guest.isWanted ? 'ተፈላጊ (WANTED)' : 'የተለመደ'}`;
-    const encoded = encodeURIComponent(text);
-    const url = platform === 'telegram' 
-      ? `https://t.me/share/url?url=${window.location.href}&text=${encoded}`
-      : `https://api.whatsapp.com/send?text=${encoded}`;
-    window.open(url, '_blank');
-  };
-
-  const handleNotifShare = (notif: Notification, platform: 'telegram' | 'whatsapp') => {
-    const text = `*የፖሊስ ኮሚሽን ማስጠንቀቂያ*\n\nርዕስ: ${notif.title}\nመረጃ: ${notif.message}\nሰዓት: ${notif.timestamp}\n\nበቤንሻንጉል ጉምዝ ፖሊስ የሪፖርት መቀበያ ሲስተም የተላከ።`;
-    const encoded = encodeURIComponent(text);
-    const url = platform === 'telegram' 
-      ? `https://t.me/share/url?url=${window.location.href}&text=${encoded}`
-      : `https://api.whatsapp.com/send?text=${encoded}`;
-    window.open(url, '_blank');
+  // Handle mobile sidebar auto-close
+  const navigateTo = (v: string) => {
+    setView(v);
+    setIsSidebarOpen(false);
   };
 
   if (!user) {
     return (
-      <div className="min-h-screen bg-slate-900 flex items-center justify-center p-6 relative overflow-hidden">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-slate-800 to-slate-900 opacity-50"></div>
-        <div className="bg-white rounded-[40px] shadow-2xl p-12 w-full max-w-md relative z-10 border-t-[12px] border-amber-600 transition-all hover:shadow-amber-500/10">
-          <img src={LOGO_PATH} className="w-24 h-24 mx-auto mb-6 drop-shadow-2xl animate-pulse" />
-          <h1 className={`text-4xl text-center mb-1 ${GOLDEN_GRADIENT} tracking-tight`}>{t.appName}</h1>
-          <p className="text-[10px] font-black text-slate-400 text-center uppercase mb-10 tracking-[0.3em]">{t.developedBy}</p>
-          <form onSubmit={handleLogin} className="space-y-6">
-            <div className="relative group">
-               <input type="text" placeholder={t.username} className="w-full bg-slate-50 border-4 border-slate-100 rounded-3xl px-6 py-5 outline-none focus:border-amber-500 font-bold transition-all pl-14 group-hover:border-slate-200" value={loginData.username} onChange={e => setLoginData({...loginData, username: e.target.value})} required />
-               <Users className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-300 group-hover:text-amber-500 transition-colors" size={20}/>
-            </div>
-            <div className="relative group">
-               <input type="password" placeholder={t.password} className="w-full bg-slate-50 border-4 border-slate-100 rounded-3xl px-6 py-5 outline-none focus:border-amber-500 font-bold transition-all pl-14 group-hover:border-slate-200" value={loginData.password} onChange={e => setLoginData({...loginData, password: e.target.value})} required />
-               <ShieldCheck className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-300 group-hover:text-amber-500 transition-colors" size={20}/>
-            </div>
-            <button className="w-full bg-slate-800 hover:bg-slate-700 active:scale-95 text-white font-black py-6 rounded-3xl transition-all shadow-2xl uppercase text-xs mt-6 flex items-center justify-center gap-4 tracking-widest">
-               {t.login} <ChevronRight size={18}/>
+      <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4">
+        <div className="bg-white rounded-2xl shadow-2xl p-6 sm:p-10 w-full max-w-sm transition-all">
+          <img src={LOGO_PATH} className="w-20 h-20 mx-auto mb-6" />
+          <h1 className={`text-2xl sm:text-3xl text-center mb-1 ${GOLDEN_GRADIENT}`}>{t.appName}</h1>
+          <p className="text-[10px] font-bold text-gray-400 text-center uppercase mb-8">{t.developedBy}</p>
+          <form onSubmit={handleLogin} className="space-y-4">
+            <input type="text" placeholder={t.username} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-amber-500 font-bold transition-all" value={loginData.username} onChange={e => setLoginData({...loginData, username: e.target.value})} required />
+            <input type="password" placeholder={t.password} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-amber-500 font-bold transition-all" value={loginData.password} onChange={e => setLoginData({...loginData, password: e.target.value})} required />
+            <button className="w-full bg-slate-800 hover:bg-slate-700 text-white font-black py-4 rounded-xl shadow-lg transition-all uppercase text-sm mt-4 tracking-wider">
+              {t.login}
             </button>
           </form>
-          <div className="mt-10 flex justify-center gap-5">
-            <button onClick={() => setLang('am')} className={`px-8 py-3 rounded-2xl text-[10px] font-black tracking-widest transition-all ${lang === 'am' ? 'bg-amber-500 text-white shadow-xl' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}>አማርኛ</button>
-            <button onClick={() => setLang('en')} className={`px-8 py-3 rounded-2xl text-[10px] font-black tracking-widest transition-all ${lang === 'en' ? 'bg-amber-500 text-white shadow-xl' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}>ENGLISH</button>
+          <div className="mt-8 flex justify-center gap-4">
+            <button onClick={() => setLang('am')} className={`px-4 py-2 rounded-full text-[10px] font-black transition-all ${lang === 'am' ? 'bg-amber-500 text-white shadow-md' : 'bg-gray-100 text-gray-500'}`}>አማርኛ</button>
+            <button onClick={() => setLang('en')} className={`px-4 py-2 rounded-full text-[10px] font-black transition-all ${lang === 'en' ? 'bg-amber-500 text-white shadow-md' : 'bg-gray-100 text-gray-500'}`}>EN</button>
           </div>
-          <p className="text-[10px] text-slate-400 text-center mt-12 font-bold italic opacity-60 uppercase tracking-tighter">"{t.motto}"</p>
+          <p className="text-[9px] text-gray-300 text-center mt-10 font-bold italic">"{t.motto}"</p>
+          <p className="text-[8px] text-amber-600/60 text-center mt-2 font-black uppercase tracking-tight">{t.developerCredit}</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col md:flex-row font-sans">
-      <aside className="w-80 bg-slate-900 text-white flex flex-col no-print hidden md:flex border-r-4 border-amber-600/20 shadow-2xl overflow-hidden relative">
-        <div className="absolute top-0 left-0 w-full h-1 bg-amber-500"></div>
-        <div className="p-8 border-b border-white/5 text-center bg-slate-800/30">
-          <img src={LOGO_PATH} className="w-20 h-20 mx-auto mb-4 drop-shadow-lg" />
-          <h2 className={`text-2xl ${GOLDEN_GRADIENT} tracking-tighter`}>{t.appName}</h2>
+    <div className="min-h-screen bg-[#F3F4F6] flex flex-col md:flex-row font-sans text-slate-900 overflow-hidden">
+      {/* Sidebar Overlay */}
+      {isSidebarOpen && (
+        <div className="fixed inset-0 bg-black/50 z-40 md:hidden" onClick={() => setIsSidebarOpen(false)} />
+      )}
+
+      {/* Sidebar */}
+      <aside className={`fixed md:relative z-50 w-64 h-full bg-[#1F2937] text-white flex flex-col transition-all duration-300 no-print 
+        ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}>
+        <div className="p-6 border-b border-white/5 text-center flex flex-col items-center">
+          <img src={LOGO_PATH} className="w-12 h-12 mb-3" />
+          <h2 className={`text-lg leading-tight ${GOLDEN_GRADIENT}`}>{t.appName}</h2>
+          <p className="text-[9px] font-bold text-gray-400 uppercase mt-1 opacity-60 leading-tight">{t.developedBy}</p>
         </div>
-        <nav className="flex-1 p-6 space-y-2 overflow-y-auto custom-scrollbar">
-          <NavItem icon={<TrendingUp size={20}/>} label={t.dashboard} active={view === 'dashboard'} onClick={() => setView('dashboard')} />
+        
+        <nav className="flex-1 p-4 space-y-1 overflow-y-auto scrollbar-hide">
+          <NavItem icon={<LayoutDashboard size={18}/>} label={t.dashboard} active={view === 'dashboard'} onClick={() => navigateTo('dashboard')} />
           {user.role === UserRole.RECEPTION && (
             <>
-              <NavItem icon={<UserPlus size={20}/>} label={t.registerGuest} active={view === 'registerGuest'} onClick={() => setView('registerGuest')} />
-              <NavItem icon={<Users size={20}/>} label={t.guestList} active={view === 'guestList'} onClick={() => setView('guestList')} />
-              <NavItem icon={<FileBarChart size={20}/>} label={t.reports} active={view === 'reports'} onClick={() => setView('reports')} />
-              <NavItem icon={<Settings size={20}/>} label={t.settings} active={view === 'settings'} onClick={() => setView('settings')} />
+              <NavItem icon={<UserPlus size={18}/>} label={t.registerGuest} active={view === 'registerGuest'} onClick={() => navigateTo('registerGuest')} />
+              <NavItem icon={<Users size={18}/>} label={t.guestList} active={view === 'guestList'} onClick={() => navigateTo('guestList')} />
+              <NavItem icon={<Settings size={18}/>} label={t.settings} active={view === 'settings'} onClick={() => navigateTo('settings')} />
             </>
           )}
           {(user.role === UserRole.LOCAL_POLICE || user.role === UserRole.SUPER_POLICE) && (
             <>
-              <NavItem icon={<ShieldAlert size={20}/>} label={t.policeNotice} active={view === 'addWanted'} onClick={() => setView('addWanted')} />
-              <NavItem icon={<Users size={20}/>} label={t.guestList} active={view === 'guestList'} onClick={() => setView('guestList')} />
-              <NavItem icon={<Building2 size={20}/>} label={t.hotelDirectory} active={view === 'hotelDirectory'} onClick={() => setView('hotelDirectory')} />
-              <NavItem icon={<FileBarChart size={20}/>} label={t.reports} active={view === 'reports'} onClick={() => setView('reports')} />
+              <NavItem icon={<Plus size={18}/>} label={t.policeNotice} active={view === 'addWanted'} onClick={() => navigateTo('addWanted')} />
+              <NavItem icon={<Users size={18}/>} label={t.guestList} active={view === 'guestList'} onClick={() => navigateTo('guestList')} />
+              <NavItem icon={<Building2 size={18}/>} label={t.hotelDirectory} active={view === 'hotelDirectory'} onClick={() => navigateTo('hotelDirectory')} />
             </>
           )}
-          <NavItem icon={<Bell size={20}/>} label={t.notifications} active={view === 'notifications'} count={filteredNotifications.length} onClick={() => setView('notifications')} />
-          <NavItem icon={<Info size={20}/>} label={t.appUtility} active={view === 'utility'} onClick={() => setView('utility')} />
+          <NavItem icon={<Bell size={18}/>} label={t.notifications} active={view === 'notifications'} count={notifications.filter(n => !user.zone || n.targetZone === user.zone).length} onClick={() => navigateTo('notifications')} />
+          <NavItem icon={<Info size={18}/>} label={t.appUtility} active={view === 'utility'} onClick={() => navigateTo('utility')} />
         </nav>
-        <div className="p-8 border-t border-white/5 bg-slate-800/50">
-          <button onClick={handleLogout} className="flex items-center justify-center gap-3 w-full py-4 bg-red-600/10 hover:bg-red-600/20 text-red-500 rounded-2xl text-xs font-black uppercase tracking-widest transition-all"><LogOut size={18}/> {t.logout}</button>
-          <p className="text-[8px] text-slate-500 mt-6 text-center font-black uppercase tracking-widest opacity-40 leading-relaxed">{t.developerCredit}</p>
+
+        <div className="p-4 border-t border-white/5 bg-[#111827]/50">
+          <div className="text-[8px] text-amber-500/50 mb-3 text-center uppercase font-black leading-tight">{t.developerCredit}</div>
+          <button onClick={handleLogout} className="flex items-center justify-center gap-2 w-full py-3 bg-red-500/10 hover:bg-red-500 text-red-500 hover:text-white rounded-xl text-[10px] font-black uppercase transition-all">
+            <LogOut size={16}/> {t.logout}
+          </button>
         </div>
       </aside>
 
-      <div className="flex-1 flex flex-col overflow-hidden">
-        <header className="bg-white border-b px-8 py-5 flex justify-between items-center sticky top-0 z-30 shadow-sm no-print">
-          <div className="flex items-center gap-4">
-             <button className="md:hidden p-2 hover:bg-slate-100 rounded-lg transition-transform active:scale-90" onClick={() => setIsSidebarOpen(true)}><Menu/></button>
-             <div className="flex flex-col">
-                <h3 className="font-black text-slate-800 uppercase text-xs tracking-[0.2em]">{t[view] || view}</h3>
-                {isSyncing && <p className="text-[8px] font-black text-amber-600 animate-pulse uppercase tracking-widest mt-1">የፖሊስ መቀበያ ሲስተም ጋር እየተገናኘ ነዉ... / Syncing with Receiving System...</p>}
+      {/* Main Container */}
+      <div className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden">
+        {/* Top Header */}
+        <header className="bg-white border-b px-4 sm:px-6 py-4 flex justify-between items-center shadow-sm z-30">
+          <div className="flex items-center gap-3">
+             <button className="md:hidden p-2 -ml-2 text-slate-500" onClick={() => setIsSidebarOpen(true)}>
+               <Menu size={20}/>
+             </button>
+             <div>
+               <h3 className="font-black text-slate-800 uppercase text-xs sm:text-sm tracking-widest leading-none">
+                 {t[view] || view}
+               </h3>
+               <p className="text-[10px] text-slate-400 font-bold mt-1 uppercase hidden sm:block">
+                 {hotelProfile.name || "Regional System"}
+               </p>
              </div>
           </div>
-          <div className="flex items-center gap-6">
-             <div className="text-right leading-none hidden sm:block">
-                <p className="text-xs font-black text-slate-900 uppercase tracking-tight">{user.username}</p>
-                <p className="text-[10px] text-amber-600 font-bold uppercase mt-1 tracking-tighter flex items-center justify-end gap-1">
-                   {user.zone || "Command Post Selection..."} {user.isConfirmed && <Lock size={10} className="opacity-50"/>}
+          
+          <div className="flex items-center gap-3">
+             <div className="text-right leading-none hidden xs:block">
+                <p className="text-[10px] sm:text-xs font-black text-slate-900 uppercase tracking-tighter">{user.username}</p>
+                <p className="text-[8px] sm:text-[9px] text-amber-600 font-black uppercase mt-1">
+                  {user.zone || (user.role === UserRole.SUPER_POLICE ? "Police HQ" : "Pending...")}
                 </p>
              </div>
-             <div className="w-12 h-12 bg-amber-500 rounded-2xl text-white flex items-center justify-center font-black shadow-xl shadow-amber-500/20 text-xl transition-transform hover:rotate-6">{user.username[0].toUpperCase()}</div>
+             <div className="w-8 h-8 sm:w-10 sm:h-10 bg-amber-100 rounded-xl text-amber-700 flex items-center justify-center font-black shadow-sm border border-amber-200 uppercase">
+                {user.username[0]}
+             </div>
           </div>
         </header>
 
-        <main className="flex-1 overflow-y-auto p-10 max-w-7xl mx-auto w-full relative custom-scrollbar">
-          {zoomImg && <div className="fixed inset-0 bg-slate-900/95 z-[100] flex items-center justify-center p-12 backdrop-blur-md" onClick={() => setZoomImg(null)}><div className="relative group animate-in zoom-in duration-300"><X className="absolute -top-12 right-0 text-white cursor-pointer hover:scale-125 transition-all" size={32}/><img src={zoomImg} className="max-w-full max-h-[85vh] rounded-3xl shadow-2xl border-4 border-white/10 ring-1 ring-white/20"/></div></div>}
+        {/* Content Area */}
+        <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-10 custom-scrollbar scroll-smooth">
+          {zoomImg && (
+            <div className="fixed inset-0 bg-slate-900/95 z-[100] flex items-center justify-center p-4" onClick={() => setZoomImg(null)}>
+              <div className="relative max-w-4xl w-full">
+                <button className="absolute -top-12 right-0 text-white bg-white/10 p-2 rounded-full hover:bg-white/20 transition-all">
+                  <X size={24}/>
+                </button>
+                <img src={zoomImg} className="w-full h-auto max-h-[85vh] rounded-2xl shadow-2xl object-contain ring-4 ring-white/10" />
+              </div>
+            </div>
+          )}
           
-          <div className="space-y-10">
+          <div className="max-w-6xl mx-auto space-y-6 animate-in fade-in duration-500">
             {view === 'setupHotel' && <SetupForm hotelProfile={hotelProfile} setHotelProfile={setHotelProfile} onSubmit={handleSetupSubmit} t={t} />}
-            {view === 'setupPolice' && <JurisdictionSetup ZONES={ZONES} setUser={setUser} user={user} setView={setView} t={t} />}
+            {view === 'setupPolice' && (
+              <div className="max-w-md mx-auto bg-white p-6 sm:p-8 rounded-2xl shadow-xl border border-gray-100 animate-in zoom-in-95 duration-300">
+                <h3 className="text-lg font-black mb-6 uppercase text-slate-800 tracking-tight flex items-center gap-2">
+                  <MapPin size={20} className="text-amber-500"/>
+                  Assigned Jurisdiction
+                </h3>
+                <div className="grid grid-cols-1 gap-3">
+                  {ZONES.map(z => (
+                    <button key={z} onClick={() => { setUser({...user, zone: z}); setView('dashboard'); }} 
+                      className="w-full text-left p-4 bg-gray-50 border border-slate-100 rounded-xl font-black text-[11px] text-gray-500 uppercase tracking-wider hover:bg-amber-50 hover:border-amber-500 hover:text-amber-700 transition-all shadow-sm">
+                      {z}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
             
-            {view === 'dashboard' && <Dashboard user={user} t={t} guests={visibleGuests} notifications={filteredNotifications} wanted={wanted} setView={setView} isSyncing={isSyncing} />}
-            {view === 'guestList' && <ListView items={visibleGuests} t={t} setZoomImg={setZoomImg} handleShare={handleShare} user={user} />}
-            {view === 'registerGuest' && <GuestForm newGuest={newGuest} setNewGuest={setNewGuest} onSubmit={saveGuest} t={t} handleFileUpload={(e: any) => handleFileUpload(e, 'guest')} isSyncing={isSyncing} />}
-            {view === 'addWanted' && <WantedForm wanted={wanted} setWanted={setWanted} t={t} handleFileUpload={(e: any) => handleFileUpload(e, 'wanted')} addWanted={addWanted} newWanted={newWanted} setNewWanted={setNewWanted} />}
-            {view === 'hotelDirectory' && <HotelDir hotels={allHotels} t={t} user={user} />}
-            {view === 'utility' && <UtilityView t={t} GOLDEN_GRADIENT={GOLDEN_GRADIENT} />}
-            {view === 'reports' && <ReportSection t={t} guests={visibleGuests} user={user} GOLDEN_GRADIENT={GOLDEN_GRADIENT} />}
-            {view === 'notifications' && <NotifView notifications={filteredNotifications} t={t} setView={setView} handleShare={handleNotifShare} />}
+            {view === 'dashboard' && <Dashboard user={user} t={t} guests={visibleGuests} notifications={notifications} wanted={wanted} setView={setView} />}
+            {view === 'guestList' && <ListView items={visibleGuests} t={t} setZoomImg={setZoomImg} searchTerm={searchTerm} setSearchTerm={setSearchTerm} />}
+            {view === 'registerGuest' && <GuestForm newGuest={newGuest} setNewGuest={setNewGuest} onSubmit={saveGuest} t={t} handleFileUpload={handleFileUpload} />}
+            {view === 'addWanted' && <WantedForm wanted={wanted} setWanted={setWanted} t={t} handleFileUpload={handleFileUpload} addWanted={addWanted} newWanted={newWanted} setNewWanted={setNewWanted} />}
+            {view === 'hotelDirectory' && <HotelDir hotels={allHotels} t={t} />}
+            {view === 'utility' && (
+              <div className="bg-white p-6 sm:p-10 rounded-3xl shadow-xl border border-slate-100 space-y-8 max-w-3xl mx-auto">
+                <h3 className={`text-2xl sm:text-3xl text-center leading-tight ${GOLDEN_GRADIENT}`}>{t.appUtility}</h3>
+                <div className="bg-amber-50/50 p-6 rounded-2xl border border-amber-100">
+                  <p className="text-slate-700 font-bold leading-relaxed text-sm sm:text-base text-justify">
+                    {t.utilityText}
+                  </p>
+                </div>
+                <div className="flex flex-col items-center gap-4 pt-6 border-t border-slate-100">
+                  <img src={LOGO_PATH} className="w-16 h-16 opacity-30 grayscale" />
+                  <p className="text-amber-700 font-black uppercase text-xs tracking-widest text-center">{t.developerCredit}</p>
+                </div>
+              </div>
+            )}
+            {view === 'reports' && <ReportSection t={t} guests={visibleGuests} user={user} />}
+            {view === 'notifications' && <NotifView notifications={notifications.filter(n => !user.zone || n.targetZone === user.zone)} t={t} setView={setView} />}
             {view === 'settings' && <SetupForm hotelProfile={hotelProfile} setHotelProfile={setHotelProfile} onSubmit={handleSetupSubmit} t={t} isSettings />}
           </div>
-
-          <PrintFooter t={t} />
         </main>
       </div>
     </div>
   );
 }
 
-// --- Components ---
-
-// Missing Input component used in forms
-function Input({ label, value, onChange, required, icon, disabled }: any) {
-  return (
-    <div className="space-y-3">
-      <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">{label}</label>
-      <div className="relative group">
-        <input 
-          type="text" 
-          value={value} 
-          onChange={(e) => onChange(e.target.value)} 
-          required={required} 
-          disabled={disabled}
-          className="w-full bg-slate-50 border-4 border-slate-100 rounded-3xl px-6 py-5 outline-none focus:border-amber-500 font-bold transition-all pl-14 group-hover:border-slate-200 text-slate-800" 
-        />
-        <div className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-300 group-hover:text-amber-500 transition-colors">
-          {icon}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// Missing SetupForm component
-function SetupForm({ hotelProfile, setHotelProfile, onSubmit, t, isSettings }: any) {
-  return (
-    <div className="max-w-4xl mx-auto bg-white p-16 rounded-[60px] shadow-2xl border-2 border-slate-100 relative overflow-hidden animate-in zoom-in-95 duration-500">
-      <div className="text-center mb-12">
-        <Building2 className="mx-auto mb-6 text-amber-500" size={56}/>
-        <h3 className="text-3xl font-black text-slate-900 uppercase tracking-tighter">{isSettings ? t.settings : t.setupHotel}</h3>
-        <p className="text-[10px] font-bold text-slate-400 mt-2 uppercase tracking-widest">{t.setupWelcome}</p>
-      </div>
-      <form onSubmit={onSubmit} className="space-y-8">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-          <Input label={t.hotel} value={hotelProfile.name} onChange={(v: string) => setHotelProfile({...hotelProfile, name: v})} required icon={<Building2 size={20}/>} />
-          <Input label={t.hotelAddress} value={hotelProfile.address} onChange={(v: string) => setHotelProfile({...hotelProfile, address: v})} required icon={<MapPin size={20}/>} />
-          <div className="space-y-3">
-            <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">{t.zone}</label>
-            <div className="relative group">
-              <select 
-                value={hotelProfile.zone} 
-                onChange={(e) => setHotelProfile({...hotelProfile, zone: e.target.value})}
-                required
-                className="w-full bg-slate-50 border-4 border-slate-100 rounded-3xl px-6 py-5 outline-none focus:border-amber-500 font-bold transition-all pl-14 group-hover:border-slate-200 text-slate-800 appearance-none"
-              >
-                <option value="">{t.selectJurisdiction}</option>
-                {ZONES.map(z => <option key={z} value={z}>{z}</option>)}
-              </select>
-              <Map className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-300 group-hover:text-amber-500 transition-colors" size={20}/>
-            </div>
-          </div>
-          <Input label={t.receptionistName} value={hotelProfile.receptionistName} onChange={(v: string) => setHotelProfile({...hotelProfile, receptionistName: v})} required icon={<Users size={20}/>} />
-          <Input label={t.phoneNumber} value={hotelProfile.phoneNumber} onChange={(v: string) => setHotelProfile({...hotelProfile, phoneNumber: v})} required icon={<Phone size={20}/>} />
-          <Input label={t.digitalId} value={hotelProfile.digitalIdPhoto || ''} onChange={(v: string) => setHotelProfile({...hotelProfile, digitalIdPhoto: v})} icon={<Fingerprint size={20}/>} />
-        </div>
-        <button className="w-full bg-slate-900 text-white font-black py-6 rounded-3xl uppercase text-xs shadow-2xl hover:bg-slate-800 transition-all tracking-[0.3em] mt-6 flex items-center justify-center gap-4 active:scale-95">
-           {t.save} <CheckCircle2 size={18}/>
-        </button>
-      </form>
-    </div>
-  );
-}
-
 function NavItem({ icon, label, active, onClick, count }: any) {
   return (
-    <button onClick={onClick} className={`w-full flex items-center gap-5 px-6 py-5 rounded-2xl text-[11px] font-black uppercase tracking-widest transition-all duration-300 group ${active ? 'bg-amber-500 text-white shadow-xl shadow-amber-500/40 translate-x-2' : 'text-slate-400 hover:bg-white/5 hover:text-white'}`}>
-      <span className={`${active ? 'text-white' : 'text-amber-500/50 group-hover:text-amber-500'} transition-colors`}>{icon}</span>
+    <button onClick={onClick} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-[10px] font-black uppercase tracking-[1px] transition-all duration-300 group
+      ${active ? 'bg-amber-500 text-white shadow-lg shadow-amber-500/20 translate-x-1' : 'text-slate-400 hover:bg-white/5 hover:text-white'}`}>
+      <span className={`${active ? 'scale-110' : 'group-hover:scale-110'} transition-transform`}>{icon}</span>
       <span className="flex-1 text-left">{label}</span>
-      {count > 0 && <span className="bg-red-500 text-white text-[9px] px-2.5 py-1 rounded-xl shadow-lg shadow-red-500/20 animate-pulse">{count}</span>}
+      {count > 0 && <span className="bg-red-500 text-white text-[9px] px-2 py-0.5 rounded-full font-black shadow-sm ring-2 ring-slate-800">{count}</span>}
     </button>
   );
 }
 
-function Dashboard({ t, guests, notifications, wanted, setView, user, isSyncing }: any) {
+function Dashboard({ t, guests, notifications, wanted, setView, user }: any) {
   const stats = [
-    { l: t.guestList, v: guests.length, c: 'bg-indigo-600', icon: <Users size={24}/>, am: "የእንግዳ ዝርዝር" },
-    { l: t.wantedPersons, v: wanted.length, c: 'bg-red-600', icon: <ShieldAlert size={24}/>, am: "ተፈላጊ ሰዎች" },
-    { l: t.notifications, v: notifications.length, c: 'bg-amber-600', icon: <Bell size={24}/>, am: "የፖሊስ ሪፖርቶች" }
+    { l: t.guestList, v: guests.length, c: 'bg-indigo-600', icon: <Users size={20}/> },
+    { l: t.wantedPersons, v: wanted.length, c: 'bg-red-600', icon: <AlertTriangle size={20}/> },
+    { l: t.notifications, v: notifications.filter((n:any) => !user.zone || n.targetZone === user.zone).length, c: 'bg-amber-600', icon: <Bell size={20}/> }
   ];
-  
-  const chartData = [
-    { name: 'ሰኞ', count: 12 }, { name: 'ማክሰኞ', count: 18 }, { name: 'ረቡዕ', count: 15 },
-    { name: 'ሐሙስ', count: 25 }, { name: 'አርብ', count: 32 }, { name: 'ቅዳሜ', count: 28 }, { name: 'እሁድ', count: 14 },
-  ];
-
   return (
-    <div className="space-y-10 no-print animate-in fade-in duration-500">
-      {(user.role === UserRole.LOCAL_POLICE || user.role === UserRole.SUPER_POLICE) && (
-        <div className="bg-slate-900 text-white p-12 rounded-[50px] shadow-2xl relative overflow-hidden border-b-[10px] border-amber-600">
-           <div className="absolute top-0 right-0 w-80 h-80 bg-amber-500/10 rounded-full -mr-40 -mt-40 blur-3xl"></div>
-           <div className="relative z-10 text-center space-y-4">
-              <ShieldCheck className="mx-auto text-amber-500" size={64}/>
-              <h2 className="text-4xl font-black uppercase tracking-tighter leading-none">{t.motto}</h2>
-              <p className="text-amber-600 font-bold uppercase tracking-[0.4em] text-[11px]">{t.developedBy}</p>
-           </div>
-           <div className="mt-10 flex justify-center items-center gap-12 border-t border-white/10 pt-8">
-              <div className="text-center">
-                 <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest">Active Monitoring</p>
-                 <div className="flex items-center justify-center gap-2 mt-2">
-                    <Radio className="text-emerald-500 animate-pulse" size={16}/>
-                    <span className="text-xl font-black text-emerald-500">LIVE</span>
-                 </div>
-              </div>
-              <div className="w-px h-10 bg-white/10"></div>
-              <div className="text-center">
-                 <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest">Jurisdiction</p>
-                 <p className="text-xl font-black text-white mt-1 uppercase">{user.zone || "Regional"}</p>
-              </div>
-           </div>
-        </div>
-      )}
-
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-        {stats.map(s => <div key={s.l} className="bg-white p-10 rounded-[40px] border-2 border-slate-100 flex items-center justify-between shadow-sm hover:shadow-2xl hover:border-amber-200 transition-all cursor-pointer group hover:-translate-y-2 active:scale-95" onClick={() => setView(s.l === t.guestList ? 'guestList' : s.l === t.wantedPersons ? 'wantedPersons' : 'notifications')}>
-          <div>
-            <p className="text-[10px] font-black text-slate-400 uppercase mb-2 tracking-widest">{s.am}</p>
-            <p className="text-5xl font-black text-slate-900 group-hover:text-amber-600 transition-colors">{s.v}</p>
-            <p className="text-[9px] font-bold text-slate-400 mt-2 uppercase">{s.l}</p>
+    <div className="space-y-6 sm:space-y-8">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+        {stats.map(s => (
+          <div key={s.l} className="bg-white p-6 rounded-2xl border border-slate-100 flex items-center justify-between shadow-sm hover:shadow-md transition-all cursor-pointer group active:scale-[0.98]" 
+            onClick={() => setView(s.l === t.guestList ? 'guestList' : s.l === t.wantedPersons ? 'wantedPersons' : 'notifications')}>
+            <div>
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">{s.l}</p>
+              <p className="text-3xl font-black text-slate-800 tracking-tighter">{s.v}</p>
+            </div>
+            <div className={`${s.c} w-12 h-12 rounded-2xl flex items-center justify-center text-white shadow-lg group-hover:rotate-6 transition-transform`}>
+              {s.icon}
+            </div>
           </div>
-          <div className={`${s.c} w-16 h-16 rounded-3xl flex items-center justify-center text-white shadow-2xl shadow-slate-200 group-hover:scale-110 group-hover:rotate-12 transition-all duration-500`}>{s.icon}</div>
-        </div>)}
+        ))}
       </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
-        <div className="bg-white p-10 rounded-[40px] border-2 border-slate-100 shadow-sm">
-           <div className="flex justify-between items-center mb-10">
-              <div>
-                <h4 className="font-black text-slate-800 uppercase text-xs tracking-widest">የክልሉ የመረጃ ፍሰት ደረጃ / Regional Intelligence Trends</h4>
-                <p className="text-[9px] text-slate-400 font-bold uppercase mt-1">Automatic Regional Sync Analysis</p>
-              </div>
-              <History className="text-amber-500" size={24}/>
-           </div>
-           <div className="h-80 w-full">
-             <ResponsiveContainer width="100%" height="100%">
-               <AreaChart data={chartData}>
-                 <defs>
-                   <linearGradient id="colorCount" x1="0" y1="0" x2="0" y2="1">
-                     <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.2}/>
-                     <stop offset="95%" stopColor="#f59e0b" stopOpacity={0}/>
-                   </linearGradient>
-                 </defs>
-                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                 <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fontSize: 10, fontWeight: 900, fill: '#94a3b8'}} />
-                 <YAxis axisLine={false} tickLine={false} tick={{fontSize: 10, fontWeight: 900, fill: '#94a3b8'}} />
-                 <Tooltip contentStyle={{borderRadius: '24px', border: 'none', boxShadow: '0 25px 50px -12px rgb(0 0(0 / 0.15)', padding: '16px'}} />
-                 <Area type="monotone" dataKey="count" stroke="#f59e0b" strokeWidth={5} fillOpacity={1} fill="url(#colorCount)" animationDuration={2000} />
-               </AreaChart>
-             </ResponsiveContainer>
-           </div>
+      
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="bg-white p-6 rounded-2xl border border-slate-100 h-80 shadow-sm">
+          <h4 className="font-black text-slate-800 uppercase mb-4 text-[10px] tracking-widest flex items-center gap-2">
+            <TrendingUp size={14} className="text-indigo-500"/>
+            Registration Analytics
+          </h4>
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={[{n:'Daily', v:guests.length},{n:'Regional', v:12}]}>
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+              <XAxis dataKey="n" axisLine={false} tickLine={false} tick={{fontSize: 10, fontWeight: 700}} />
+              <YAxis axisLine={false} tickLine={false} tick={{fontSize: 10, fontWeight: 700}} />
+              <Tooltip cursor={{fill: '#f8fafc'}} contentStyle={{borderRadius: '12px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)'}} />
+              <Bar dataKey="v" fill="#6366f1" radius={[6, 6, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
         </div>
 
-        <div className="bg-white p-10 rounded-[40px] border-2 border-slate-100 shadow-sm flex flex-col relative overflow-hidden">
-           {isSyncing && <div className="absolute inset-0 bg-white/60 z-10 flex items-center justify-center backdrop-blur-sm"><div className="text-center"><RefreshCw className="mx-auto mb-4 text-amber-600 animate-spin" size={48}/><p className="text-xs font-black uppercase tracking-widest text-slate-800">መረጃዎች እየገቡ ነዉ... / Receiving Live Reports...</p></div></div>}
-           <div className="flex justify-between items-center mb-8">
-              <div>
-                <h4 className="font-black text-slate-800 uppercase text-xs tracking-widest">የመረጃ መቀበያ መዝገብ / Command Post Receiving Log</h4>
-                <p className="text-[9px] text-amber-600 font-bold uppercase mt-1">Real-time Receiving From Jurisdiction</p>
-              </div>
-              <DownloadCloud className="text-indigo-600 animate-bounce" size={24}/>
-           </div>
-           <div className="flex-1 space-y-5 overflow-y-auto max-h-[350px] pr-4 custom-scrollbar">
-             {notifications.length > 0 ? (
-               notifications.slice(0,10).map((n: any) => (
-                 <div key={n.id} className="flex items-center gap-6 p-6 bg-slate-50 rounded-[30px] border-2 border-transparent hover:border-amber-200 hover:bg-white transition-all group relative overflow-hidden active:scale-98">
-                   <div className={`absolute left-0 top-0 h-full w-1.5 ${n.type === 'danger' ? 'bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.4)]' : 'bg-indigo-500'}`}></div>
-                   <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-white shrink-0 shadow-lg ${n.type === 'danger' ? 'bg-red-600 animate-pulse' : 'bg-slate-800'}`}>
-                      {n.type === 'danger' ? <ShieldAlert size={20}/> : <FileText size={20}/>}
-                   </div>
-                   <div className="flex-1">
-                     <p className={`text-[11px] font-black uppercase tracking-tight group-hover:text-amber-600 transition-colors ${n.type === 'danger' ? 'text-red-700 font-black' : 'text-slate-900'}`}>{n.title}</p>
-                     <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-1 line-clamp-1">{n.message}</p>
-                   </div>
-                   <div className="text-right">
-                      <p className="text-[10px] font-black text-slate-800 uppercase">{n.timestamp}</p>
-                      <p className={`text-[8px] font-black uppercase mt-1 ${n.type === 'danger' ? 'text-red-500' : 'text-indigo-500'}`}>{n.type === 'danger' ? 'Intercept' : 'Incoming'}</p>
-                   </div>
-                 </div>
-               ))
-             ) : (
-               <div className="text-center py-24">
-                  <Activity className="mx-auto mb-4 text-slate-200" size={48}/>
-                  <p className="text-slate-300 font-black uppercase tracking-widest text-xs italic">ምንም መረጃ የለም... / Standing by for incoming feeds...</p>
-               </div>
-             )}
-           </div>
-           <button onClick={() => setView('notifications')} className="mt-8 w-full py-5 bg-slate-900 text-white font-black text-[10px] uppercase tracking-widest rounded-3xl hover:bg-slate-800 shadow-xl transition-all flex items-center justify-center gap-3 active:scale-95">
-             ወደ መረጃ መቀበያ ሂድ / Access Command Center <ChevronRight size={14}/>
-           </button>
+        <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm flex flex-col">
+          <h4 className="font-black text-slate-800 uppercase mb-4 text-[10px] tracking-widest flex items-center gap-2">
+            <Activity size={14} className="text-emerald-500"/>
+            Recent Regional Activity
+          </h4>
+          <div className="flex-1 overflow-y-auto">
+            <table className="w-full text-left text-[10px] font-bold">
+              <thead className="bg-slate-50 uppercase text-slate-400 sticky top-0">
+                <tr>
+                  <th className="p-3">Guest Name</th>
+                  <th className="p-3">Property</th>
+                  <th className="p-3 text-center">Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {guests.slice(0, 8).map(g => (
+                  <tr key={g.id} className="hover:bg-indigo-50/50 transition-colors">
+                    <td className="p-3 uppercase text-slate-700">{g.fullName}</td>
+                    <td className="p-3 uppercase text-slate-400 font-medium">{g.hotelName}</td>
+                    <td className="p-3 text-center">
+                      {g.isWanted ? 
+                        <span className="text-red-500 font-black animate-pulse bg-red-50 px-2 py-0.5 rounded">Wanted</span> : 
+                        <span className="text-emerald-500 font-black">Clear</span>
+                      }
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
     </div>
   );
 }
 
-function ListView({ items, t, setZoomImg, handleShare, user }: any) {
+// Added 'Save' to lucide-react imports above
+function SetupForm({ hotelProfile, setHotelProfile, onSubmit, t, isSettings }: any) {
+  const [needsId, setNeedsId] = useState(isSettings);
   return (
-    <div className="space-y-8 animate-in slide-in-from-bottom-4 duration-500">
-       <div className="flex justify-between items-end mb-4 no-print">
-          <div>
-             <h2 className="text-3xl font-black text-slate-900 uppercase tracking-tighter">የእንግዶች መዝገብ / Registry Database</h2>
-             <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mt-1">
-               {user.role === UserRole.SUPER_POLICE ? "Regional Command Oversight" : `${user.zone} Jurisdiction Registry`} • {items.length} Intelligence Entries
-             </p>
-          </div>
-          <button onClick={() => window.print()} className="flex items-center gap-3 bg-white border-4 border-slate-100 px-8 py-4 rounded-3xl text-[11px] font-black uppercase tracking-widest text-slate-700 hover:border-amber-500 hover:text-amber-600 transition-all shadow-sm active:scale-95">
-             <Printer size={18}/> {t.print}
-          </button>
-       </div>
-       <div className="bg-white rounded-[50px] shadow-sm border-4 border-slate-50 overflow-hidden overflow-x-auto custom-scrollbar">
-         <table className="w-full text-left min-w-[1000px]">
-           <thead className="bg-slate-100/50 text-[11px] font-black uppercase text-slate-400 tracking-[0.2em] border-b-2 border-slate-100">
-             <tr>
-               <th className="px-10 py-8">Biometrics / ፎቶ</th>
-               <th className="px-10 py-8">Identity / ማንነት</th>
-               <th className="px-10 py-8">Property Data / ሆቴል</th>
-               <th className="px-10 py-8">Security status / ሁኔታ</th>
-               <th className="px-10 py-8 text-center no-print">Sync / ማጋራት</th>
-             </tr>
-           </thead>
-           <tbody className="divide-y-2 divide-slate-50 text-[12px] font-black uppercase text-slate-800">
-             {items.map((g: any) => (
-               <tr key={g.id} className="hover:bg-slate-50 transition-all group">
-                 <td className="px-10 py-6">
-                   <div className="relative w-14 h-20 rounded-2xl overflow-hidden border-4 border-slate-200 shadow-lg cursor-zoom-in group-hover:border-amber-500 transition-all" onClick={() => setZoomImg(g.idPhoto)}>
-                      {g.idPhoto ? <img src={g.idPhoto} className="w-full h-full object-cover"/> : <div className="w-full h-full bg-slate-100 flex items-center justify-center text-slate-300"><ImageIcon size={24}/></div>}
-                      <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"><Maximize2 size={20} className="text-white"/></div>
-                   </div>
-                 </td>
-                 <td className="px-10 py-6">
-                    <p className="text-[14px] font-black tracking-tight text-slate-900 group-hover:text-amber-600 transition-colors">{g.fullName}</p>
-                    <p className="text-[10px] text-slate-400 tracking-widest mt-1.5">{g.nationality}</p>
-                 </td>
-                 <td className="px-10 py-6">
-                    <p className="text-slate-800">{g.hotelName}</p>
-                    <p className="text-[10px] text-amber-600 tracking-widest mt-1.5 font-black uppercase">{g.hotelZone} • አልጋ ቁጥር / Room {g.roomNumber}</p>
-                 </td>
-                 <td className="px-10 py-6">
-                    {g.isWanted ? (
-                      <span className="flex items-center gap-2 text-red-600 bg-red-50 px-4 py-2 rounded-2xl border-2 border-red-100 animate-pulse">
-                         <AlertTriangle size={16}/> ተፈላጊ / WANTED
-                      </span>
-                    ) : (
-                      <span className="flex items-center gap-2 text-emerald-600 bg-emerald-50 px-4 py-2 rounded-2xl border-2 border-emerald-100">
-                         <ShieldCheck size={16}/> ትክክለኛ / VERIFIED
-                      </span>
-                    )}
-                 </td>
-                 <td className="px-10 py-6 no-print">
-                    <div className="flex justify-center items-center gap-4 opacity-0 group-hover:opacity-100 transition-all translate-x-4 group-hover:translate-x-0">
-                       <button onClick={() => handleShare(g, 'whatsapp')} className="p-4 bg-emerald-50 text-emerald-600 rounded-2xl hover:bg-emerald-600 hover:text-white transition-all shadow-sm active:scale-90" title="Share via WhatsApp"><Send size={18}/></button>
-                       <button onClick={() => handleShare(g, 'telegram')} className="p-4 bg-blue-50 text-blue-600 rounded-2xl hover:bg-blue-600 hover:text-white transition-all shadow-sm active:scale-90" title="Share via Telegram"><Share2 size={18}/></button>
-                    </div>
-                 </td>
-               </tr>
-             ))}
-           </tbody>
-         </table>
-         {items.length === 0 && (
-           <div className="text-center py-40 border-t-2 border-slate-50">
-              <Activity className="mx-auto mb-6 text-slate-100" size={64}/>
-              <p className="text-slate-300 font-black uppercase tracking-[0.5em] text-sm opacity-40">መዝገቡ ባዶ ነዉ / Intelligence Log Empty</p>
-           </div>
-         )}
-       </div>
-    </div>
-  );
-}
-
-function GuestForm({ newGuest, setNewGuest, onSubmit, t, handleFileUpload, isSyncing }: any) {
-  return (
-    <div className="max-w-4xl mx-auto bg-white p-16 rounded-[60px] shadow-2xl border-2 border-slate-100 relative overflow-hidden animate-in zoom-in-95 duration-500">
-      <div className="text-center mb-12">
-        <UserPlus className="mx-auto mb-6 text-amber-500" size={56}/>
-        <h3 className="text-3xl font-black text-slate-900 uppercase tracking-tighter">{t.registerGuest}</h3>
-        <p className="text-[10px] font-bold text-slate-400 mt-2 uppercase tracking-widest">ሁሉም መረጃዎች በቅጽበት ለፖሊስ ይላካሉ / Reports are automatically transmitted</p>
+    <div className="max-w-xl mx-auto bg-white p-6 sm:p-10 rounded-3xl shadow-xl border border-slate-100 animate-in slide-in-from-bottom-6 duration-500">
+      <div className="flex items-center gap-4 mb-8">
+        <div className="w-14 h-14 bg-amber-100 text-amber-600 rounded-2xl flex items-center justify-center shadow-inner">
+          <Building2 size={28}/>
+        </div>
+        <div>
+          <h3 className="text-xl font-black text-slate-800 uppercase tracking-tight">{t.setupHotel}</h3>
+          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{t.setupWelcome}</p>
+        </div>
       </div>
-      <form onSubmit={onSubmit} className="space-y-10">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
-          <div className="space-y-10">
-            <Input label={t.fullName} value={newGuest.fullName} onChange={(v: string) => setNewGuest({...newGuest, fullName: v})} required icon={<Users size={20}/>} disabled={isSyncing} />
-            <Input label={t.nationality} value={newGuest.nationality} onChange={(v: string) => setNewGuest({...newGuest, nationality: v})} required icon={<Globe size={20}/>} disabled={isSyncing} />
-            <Input label={t.roomNumber} value={newGuest.roomNumber} onChange={(v: string) => setNewGuest({...newGuest, roomNumber: v})} required icon={<MapPin size={20}/>} disabled={isSyncing} />
-          </div>
-          <div className="flex flex-col items-center justify-center border-4 border-dashed border-slate-100 rounded-[50px] p-8 bg-slate-50/50 group hover:border-amber-300 transition-all relative overflow-hidden active:scale-98">
-            {isSyncing && <div className="absolute inset-0 bg-white/80 z-20 flex items-center justify-center"><RefreshCw className="text-amber-600 animate-spin" size={40}/></div>}
-            {newGuest.idPhoto ? (
-              <div className="relative w-full h-64">
-                <img src={newGuest.idPhoto} className="w-full h-full object-cover rounded-[40px] shadow-xl" />
-                {!isSyncing && <button type="button" onClick={() => setNewGuest({...newGuest, idPhoto: ''})} className="absolute -top-4 -right-4 bg-red-500 text-white p-3 rounded-2xl shadow-lg hover:bg-red-600 transition-all active:scale-90"><X size={20}/></button>}
-              </div>
-            ) : (
-              <label className="flex flex-col items-center gap-6 cursor-pointer text-slate-400 group-hover:text-amber-500 transition-all">
-                <div className="w-24 h-24 bg-white rounded-full flex items-center justify-center shadow-lg group-hover:scale-110 transition-all">
-                  <Camera size={40}/>
-                </div>
-                <div className="text-center">
-                  <p className="text-[11px] font-black uppercase tracking-widest">{t.capturePhoto}</p>
-                  <p className="text-[9px] font-bold uppercase mt-2 opacity-60">መታወቂያ ፎቶ አንሳ ወይም ምረጥ</p>
-                </div>
-                <input type="file" className="hidden" accept="image/*" onChange={handleFileUpload} disabled={isSyncing} />
-              </label>
-            )}
+
+      <form onSubmit={onSubmit} className="space-y-5">
+        <Input label={t.hotel} value={hotelProfile.name} onChange={(v:any) => setHotelProfile({...hotelProfile, name: v})} required icon={<Building2 size={16}/>} />
+        <Input label={t.hotelAddress} value={hotelProfile.address} onChange={(v:any) => setHotelProfile({...hotelProfile, address: v})} required icon={<MapPin size={16}/>} />
+        
+        <div className="space-y-1.5">
+          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">{t.zone}</label>
+          <div className="relative group">
+            <Map className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-amber-500 transition-colors" size={16}/>
+            <select className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-12 pr-4 py-3.5 font-bold text-sm outline-none focus:ring-2 focus:ring-amber-500 transition-all appearance-none" 
+              value={hotelProfile.zone} onChange={e => setHotelProfile({...hotelProfile, zone: e.target.value})} required>
+              <option value="">Select Zone</option>
+              {ZONES.map(z => <option key={z} value={z}>{z}</option>)}
+            </select>
           </div>
         </div>
-        <button className="w-full bg-slate-900 text-white font-black py-6 rounded-3xl uppercase text-xs shadow-2xl hover:bg-slate-800 transition-all tracking-[0.3em] mt-6 flex items-center justify-center gap-4 disabled:opacity-50 active:scale-95" disabled={isSyncing}>
-           {isSyncing ? "መረጃዉ እየተላከ ነዉ... / Transmitting..." : t.submit} <Send size={18}/>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+          <Input label={t.receptionistName} value={hotelProfile.receptionistName} onChange={(v:any) => setHotelProfile({...hotelProfile, receptionistName: v})} required icon={<Users size={16}/>} />
+          <Input label={t.phoneNumber} value={hotelProfile.phoneNumber} onChange={(v:any) => setHotelProfile({...hotelProfile, phoneNumber: v})} type="tel" required icon={<Phone size={16}/>} />
+        </div>
+
+        {needsId && (
+          <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl text-[10px] font-black text-amber-700 uppercase tracking-wider flex items-center gap-3">
+            <Fingerprint size={20}/>
+            {t.verificationRequired}
+          </div>
+        )}
+        
+        <button className="w-full bg-slate-800 hover:bg-slate-700 text-white font-black py-4 rounded-2xl shadow-xl transition-all uppercase text-xs tracking-[2px] mt-4 flex items-center justify-center gap-2">
+          <Save size={18}/> {t.save}
         </button>
       </form>
     </div>
   );
 }
 
-function JurisdictionSetup({ ZONES, setUser, user, setView, t }: any) {
-  const [tempZone, setTempZone] = useState<string | undefined>(user.zone);
-  const [isConfirming, setIsConfirming] = useState(false);
-
-  const handleConfirm = () => {
-    if (!tempZone) return;
-    localStorage.setItem('police_jurisdiction', tempZone);
-    localStorage.setItem('police_jurisdiction_confirmed', 'true');
-    setUser({...user, zone: tempZone, isConfirmed: true});
-    setView('dashboard');
-  };
-
+function Input({ label, value, onChange, type = "text", required, icon }: any) {
   return (
-    <div className="max-w-3xl mx-auto bg-white p-16 rounded-[60px] shadow-2xl border-2 border-slate-100 relative overflow-hidden animate-in fade-in duration-500">
-      <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/5 rounded-full -mr-32 -mt-32"></div>
-      <div className="text-center mb-12">
-         <div className="w-24 h-24 bg-indigo-50 text-indigo-600 rounded-[40px] flex items-center justify-center mx-auto mb-8 shadow-xl">
-            <ShieldCheck size={48}/>
-         </div>
-         <h3 className="text-3xl font-black text-slate-900 uppercase tracking-tighter">{t.selectJurisdiction}</h3>
-         <p className="text-[10px] font-bold text-slate-400 mt-3 tracking-widest uppercase">የፖሊስ መረጃ መቀበያ ቦታ ማስተካከያ</p>
+    <div className="space-y-1.5">
+      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">{label}</label>
+      <div className="relative group">
+        <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-amber-500 transition-colors duration-300">
+          {icon}
+        </div>
+        <input type={type} className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-12 pr-4 py-3.5 text-sm font-bold focus:ring-2 focus:ring-amber-500 outline-none transition-all group-hover:border-slate-300" 
+          value={value} onChange={e => onChange(e.target.value)} required={required} />
       </div>
-      
-      {!isConfirming ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-          {ZONES.map((z: string) => (
-            <button key={z} onClick={() => { setTempZone(z); setIsConfirming(true); }} className={`text-left p-8 bg-slate-50 border-4 rounded-[40px] font-black text-slate-600 hover:bg-indigo-50 hover:border-indigo-400 hover:text-indigo-800 transition-all flex items-center justify-between group active:scale-95 ${tempZone === z ? 'border-indigo-500 bg-indigo-50 text-indigo-800' : 'border-transparent'}`}>
-              <span className="text-[13px] uppercase tracking-tight leading-tight">{z}</span>
-              <ChevronRight className="text-slate-300 group-hover:text-indigo-500 transition-all translate-x-2" size={24}/>
-            </button>
-          ))}
-        </div>
-      ) : (
-        <div className="space-y-10 animate-in zoom-in-95 duration-500">
-          <div className="p-12 bg-amber-50 rounded-[50px] border-4 border-amber-100 text-center relative overflow-hidden">
-            <div className="absolute top-0 left-0 w-full h-2 bg-amber-400"></div>
-            <Lock className="mx-auto mb-6 text-amber-500" size={40}/>
-            <h4 className="text-2xl font-black text-slate-900 uppercase mb-3 tracking-tight">{t.confirmJurisdiction}</h4>
-            <div className="py-4 px-8 bg-white/50 rounded-3xl inline-block mb-8 border-2 border-amber-200">
-               <p className="text-3xl font-black text-amber-700 uppercase tracking-tighter">{tempZone}</p>
-            </div>
-            <p className="text-xs text-slate-600 font-black leading-relaxed mb-10 uppercase tracking-tight max-w-sm mx-auto">{t.jurisdictionWarning}</p>
-            <div className="flex gap-6 max-w-md mx-auto">
-               <button onClick={() => setIsConfirming(false)} className="flex-1 py-5 bg-white border-4 border-slate-100 rounded-3xl text-[11px] font-black uppercase text-slate-400 hover:bg-slate-50 transition-all tracking-widest">መቀየር / Change</button>
-               <button onClick={handleConfirm} className="flex-1 py-5 bg-slate-900 text-white rounded-3xl text-[11px] font-black uppercase tracking-[0.2em] shadow-2xl hover:bg-slate-800 transition-all active:scale-95">{t.confirmBtn}</button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
 
-function NotifView({ notifications, t, setView, handleShare }: any) {
+function ListView({ items, t, setZoomImg, searchTerm, setSearchTerm }: any) {
   return (
-    <div className="max-w-4xl mx-auto space-y-8 animate-in slide-in-from-right-4 duration-500">
-      <div className="flex justify-between items-center mb-10">
-         <div>
-           <h2 className="text-3xl font-black text-slate-900 uppercase tracking-tighter">የመረጃ መቀበያ ማዕከል / Command Center</h2>
-           <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Live Jurisdiction intelligence Receiving Status</p>
-         </div>
-         <span className="bg-slate-900 text-white text-[10px] font-black px-6 py-3 rounded-2xl uppercase tracking-[0.2em] shadow-xl animate-pulse">{notifications.length} Receiving</span>
+    <div className="space-y-4">
+      <div className="relative max-w-md">
+        <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18}/>
+        <input type="text" placeholder={t.searchPlaceholder} className="w-full bg-white border border-slate-200 rounded-2xl pl-12 pr-4 py-3.5 outline-none focus:ring-2 focus:ring-amber-500 font-bold text-sm shadow-sm transition-all" 
+          value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
       </div>
-      {notifications.map((n: any) => (
-        <div key={n.id} className={`p-10 bg-white border-4 rounded-[40px] shadow-sm flex gap-8 hover:shadow-2xl hover:-translate-y-2 transition-all group ${n.type === 'danger' ? 'border-red-100 ring-8 ring-red-50/30' : 'border-slate-50'}`}>
-          <div className={`p-6 rounded-3xl shrink-0 group-hover:scale-110 group-hover:rotate-6 transition-all duration-500 ${n.type === 'danger' ? 'bg-red-600 text-white shadow-2xl shadow-red-200' : 'bg-slate-800 text-white'}`}>
-             {n.type === 'danger' ? <ShieldAlert size={36}/> : <Bell size={36}/>}
-          </div>
-          <div className="flex-1">
-            <div className="flex justify-between items-start mb-4">
-               <p className="text-[11px] font-black text-slate-300 uppercase tracking-[0.3em]">{n.timestamp}</p>
-               {n.type === 'danger' && <span className="bg-red-600 text-white text-[9px] font-black px-3 py-1.5 rounded-xl uppercase animate-bounce shadow-lg shadow-red-500/30">ወዲያዉኑ እርምጃ ይወሰድ! / Critical</span>}
-            </div>
-            <h4 className={`text-lg font-black uppercase tracking-tight leading-none mb-4 group-hover:text-amber-600 transition-colors ${n.type === 'danger' ? 'text-red-700 font-black' : 'text-slate-900'}`}>{n.title}</h4>
-            <p className="text-[13px] text-slate-500 font-bold leading-relaxed mb-8">{n.message}</p>
-            <div className="flex gap-4">
-              {n.guestId && (
-                <button onClick={() => setView('guestList')} className={`flex items-center gap-3 px-8 py-4 rounded-2xl text-[11px] font-black uppercase tracking-widest transition-all active:scale-95 ${n.type === 'danger' ? 'bg-red-600 text-white hover:bg-red-700 shadow-xl shadow-red-500/20' : 'bg-slate-900 text-white hover:bg-slate-800 shadow-xl'}`}>
-                  መረጃዉን አረጋግጥ / Verify Profile <Maximize2 size={16}/>
-                </button>
+
+      <div className="bg-white rounded-3xl shadow-xl border border-slate-100 overflow-hidden">
+        <div className="overflow-x-auto custom-scrollbar">
+          <table className="w-full text-left">
+            <thead className="bg-slate-50 text-[10px] font-black uppercase text-slate-400 tracking-widest border-b border-slate-100">
+              <tr>
+                <th className="px-6 py-5">ID</th>
+                <th className="px-6 py-5">Full Name</th>
+                <th className="px-6 py-5">Property Data</th>
+                <th className="px-6 py-5 text-center">Security Status</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 text-[11px] font-bold uppercase text-slate-700">
+              {items.map((g: any) => (
+                <tr key={g.id} className="hover:bg-indigo-50/30 transition-all duration-300 group">
+                  <td className="px-6 py-4">
+                    <div className="w-12 h-16 rounded-xl overflow-hidden shadow-lg ring-2 ring-white border border-slate-100 transform group-hover:scale-110 transition-transform cursor-zoom-in" onClick={() => setZoomImg(g.idPhoto)}>
+                      <img src={g.idPhoto} className="w-full h-full object-cover" />
+                    </div>
+                  </td>
+                  <td className="px-6 py-4">
+                    <p className="font-black text-slate-800 text-sm tracking-tight">{g.fullName}</p>
+                    <p className="text-[9px] text-slate-400 mt-1 font-bold">{g.nationality} • {g.checkInDate}</p>
+                  </td>
+                  <td className="px-6 py-4 leading-tight">
+                    <p className="text-slate-600">{g.hotelName}</p>
+                    <p className="text-[9px] text-slate-400 font-bold opacity-60 mt-1">{g.hotelZone}</p>
+                  </td>
+                  <td className="px-6 py-4 text-center">
+                    {g.isWanted ? (
+                      <span className="inline-flex items-center gap-1.5 px-4 py-2 bg-red-600 text-white rounded-full text-[9px] font-black shadow-lg shadow-red-200 animate-pulse border-2 border-white uppercase">
+                        <AlertTriangle size={12}/> Wanted
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1.5 px-4 py-2 bg-emerald-500 text-white rounded-full text-[9px] font-black shadow-lg shadow-emerald-200 border-2 border-white uppercase">
+                        <CheckCircle2 size={12}/> Clear
+                      </span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+              {items.length === 0 && (
+                <tr>
+                  <td colSpan={4} className="p-20 text-center opacity-20">
+                    <Users size={64} className="mx-auto mb-4" />
+                    <p className="font-black tracking-widest uppercase">No Guests Found</p>
+                  </td>
+                </tr>
               )}
-              <div className="flex gap-2">
-                 <button onClick={() => handleShare(n, 'whatsapp')} className="p-4 bg-emerald-50 text-emerald-600 rounded-2xl hover:bg-emerald-600 hover:text-white transition-all shadow-sm active:scale-90"><Send size={20}/></button>
-                 <button onClick={() => handleShare(n, 'telegram')} className="p-4 bg-blue-50 text-blue-600 rounded-2xl hover:bg-blue-600 hover:text-white transition-all shadow-sm active:scale-90"><Share2 size={20}/></button>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function GuestForm({ onSubmit, newGuest, setNewGuest, t, handleFileUpload }: any) {
+  return (
+    <div className="max-w-xl mx-auto bg-white p-6 sm:p-10 rounded-[2.5rem] shadow-2xl border border-slate-100 animate-in zoom-in-95 duration-500">
+      <div className="flex items-center gap-4 mb-10">
+        <div className="w-16 h-16 bg-indigo-100 text-indigo-600 rounded-3xl flex items-center justify-center shadow-inner">
+          <UserPlus size={32}/>
+        </div>
+        <div>
+          <h3 className="text-2xl font-black text-slate-800 uppercase tracking-tighter leading-none">{t.registerGuest}</h3>
+          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Identity Intake Form</p>
+        </div>
+      </div>
+      
+      <form onSubmit={onSubmit} className="space-y-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+          <Input label={t.fullName} value={newGuest.fullName} onChange={(v: string) => setNewGuest({...newGuest, fullName: v})} required icon={<Users size={16}/>} />
+          <Input label={t.nationality} value={newGuest.nationality} onChange={(v: string) => setNewGuest({...newGuest, nationality: v})} required icon={<Globe size={16}/>} />
+        </div>
+        <Input label={t.roomNumber} value={newGuest.roomNumber} onChange={(v: string) => setNewGuest({...newGuest, roomNumber: v})} required icon={<Plus size={16}/>} />
+        
+        <div className="space-y-2">
+          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">{t.idPhoto}</label>
+          <div className="p-10 bg-slate-50 border-2 border-dashed border-slate-200 rounded-3xl text-center cursor-pointer hover:bg-slate-100 hover:border-indigo-400 transition-all duration-300 group" onClick={() => document.getElementById('idUpload')?.click()}>
+            <div className="flex flex-col items-center">
+              <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center shadow-lg mb-4 text-slate-400 group-hover:text-indigo-600 group-hover:scale-110 transition-all">
+                <Camera size={28}/>
               </div>
+              <p className="text-[11px] font-black uppercase text-slate-500 tracking-widest">{t.capturePhoto}</p>
+              <input type="file" id="idUpload" className="hidden" onChange={e => handleFileUpload(e, 'guest')} capture="environment" />
             </div>
+          </div>
+        </div>
+
+        {newGuest.idPhoto && (
+          <div className="relative w-32 h-44 mx-auto animate-in zoom-in-75 duration-300">
+            <img src={newGuest.idPhoto} className="w-full h-full object-cover rounded-2xl shadow-2xl ring-4 ring-white" />
+            <button type="button" onClick={() => setNewGuest({...newGuest, idPhoto: ''})} className="absolute -top-3 -right-3 bg-red-500 text-white p-2 rounded-full shadow-lg border-2 border-white">
+              <X size={14}/>
+            </button>
+          </div>
+        )}
+
+        <button className="w-full bg-slate-900 hover:bg-indigo-700 text-white font-black py-5 rounded-[1.5rem] uppercase text-sm tracking-[3px] mt-6 shadow-2xl shadow-slate-200 transition-all">
+          Submit to Registry
+        </button>
+      </form>
+    </div>
+  );
+}
+
+function WantedForm({ addWanted, newWanted, setNewWanted, t, handleFileUpload }: any) {
+  return (
+    <div className="max-w-xl mx-auto bg-white p-6 sm:p-10 rounded-[2.5rem] shadow-2xl border border-red-50 animate-in zoom-in-95 duration-500">
+      <div className="flex items-center gap-4 mb-10">
+        <div className="w-16 h-16 bg-red-100 text-red-600 rounded-3xl flex items-center justify-center shadow-inner">
+          <AlertTriangle size={32}/>
+        </div>
+        <div>
+          <h3 className="text-2xl font-black text-red-600 uppercase tracking-tighter leading-none">{t.policeNotice}</h3>
+          <p className="text-[10px] font-bold text-red-300 uppercase tracking-widest mt-1">Criminal Bulletin Board</p>
+        </div>
+      </div>
+
+      <form onSubmit={addWanted} className="space-y-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+          <Input label={t.fullName} value={newWanted.fullName} onChange={(v: string) => setNewWanted({...newWanted, fullName: v})} required icon={<Users size={16}/>} />
+          <Input label={t.crime} value={newWanted.crime} onChange={(v: string) => setNewWanted({...newWanted, crime: v})} required icon={<AlertTriangle size={16}/>} />
+        </div>
+        <div className="space-y-1.5">
+          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">{t.description}</label>
+          <textarea className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-5 py-4 text-sm font-bold focus:ring-2 focus:ring-red-500 outline-none transition-all min-h-[100px]" 
+            value={newWanted.description} onChange={e => setNewWanted({...newWanted, description: e.target.value})} />
+        </div>
+        
+        <div className="space-y-2">
+          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Suspect Photo</label>
+          <div className="p-10 bg-red-50/50 border-2 border-dashed border-red-200 rounded-3xl text-center cursor-pointer group" onClick={() => document.getElementById('wantedUpload')?.click()}>
+            <div className="flex flex-col items-center">
+              <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center shadow-lg mb-4 text-red-400 group-hover:scale-110 transition-all">
+                <Camera size={28}/>
+              </div>
+              <p className="text-[11px] font-black uppercase text-red-400 tracking-widest">Upload Profile Photo</p>
+              <input type="file" id="wantedUpload" className="hidden" onChange={e => handleFileUpload(e, 'wanted')} />
+            </div>
+          </div>
+        </div>
+
+        {newWanted.photo && (
+          <div className="relative w-32 h-40 mx-auto animate-in zoom-in-75 duration-300">
+            <img src={newWanted.photo} className="w-full h-full object-cover rounded-2xl shadow-2xl ring-4 ring-white border-2 border-red-100" />
+            <button type="button" onClick={() => setNewWanted({...newWanted, photo: ''})} className="absolute -top-3 -right-3 bg-red-600 text-white p-2 rounded-full shadow-lg border-2 border-white">
+              <X size={14}/>
+            </button>
+          </div>
+        )}
+
+        <button className="w-full bg-red-600 hover:bg-red-700 text-white font-black py-5 rounded-[1.5rem] uppercase text-sm tracking-[3px] mt-6 shadow-2xl shadow-red-100 transition-all">
+          Publish Bulletin
+        </button>
+      </form>
+    </div>
+  );
+}
+
+function HotelDir({ hotels, t }: any) {
+  return (
+    <div className="bg-white rounded-[2rem] shadow-2xl border border-slate-100 overflow-hidden">
+      <div className="overflow-x-auto custom-scrollbar">
+        <table className="w-full text-left text-[11px] font-bold uppercase tracking-tight">
+          <thead className="bg-slate-50 text-slate-400 text-[10px] font-black uppercase tracking-widest border-b border-slate-100">
+            <tr>
+              <th className="px-8 py-6">Hotel Name</th>
+              <th className="px-8 py-6">Jurisdiction</th>
+              <th className="px-8 py-6">Personnel Info</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {hotels.map((h: any) => (
+              <tr key={h.id} className="hover:bg-slate-50 transition-all duration-300">
+                <td className="px-8 py-5">
+                   <div className="flex items-center gap-3">
+                     <div className="w-10 h-10 bg-indigo-50 rounded-xl flex items-center justify-center text-indigo-600 shadow-inner">
+                       <Building2 size={18}/>
+                     </div>
+                     <span className="font-black text-slate-800 tracking-tight">{h.name}</span>
+                   </div>
+                </td>
+                <td className="px-8 py-5 text-slate-400 font-black">{h.zone}</td>
+                <td className="px-8 py-5">
+                  <p className="text-slate-700">{h.receptionistName}</p>
+                  <div className="flex items-center gap-1 text-[9px] text-indigo-500 font-black mt-1">
+                    <Phone size={10}/> {h.phoneNumber}
+                  </div>
+                </td>
+              </tr>
+            ))}
+            {hotels.length === 0 && (
+              <tr>
+                <td colSpan={3} className="p-20 text-center opacity-20">
+                  <Building2 size={64} className="mx-auto mb-4" />
+                  <p className="font-black tracking-widest uppercase">No Hotels Registered</p>
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function ReportSection({ t, guests, user }: any) {
+  return (
+    <div className="bg-white p-10 rounded-[3rem] shadow-2xl border border-slate-100 text-center space-y-12 max-w-4xl mx-auto">
+      <div className="flex flex-col items-center">
+        <div className="p-6 bg-amber-50 rounded-3xl shadow-inner mb-6 ring-8 ring-amber-50/50">
+          <FileBarChart className="text-amber-500" size={56} />
+        </div>
+        <h3 className={`text-3xl uppercase leading-none ${GOLDEN_GRADIENT}`}>Official Oversight Ledger</h3>
+        <p className="text-[10px] font-black text-slate-400 uppercase tracking-[4px] mt-4 opacity-60 leading-relaxed max-w-sm">
+          Certified Regional Law Enforcement Documentation Center
+        </p>
+      </div>
+
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 sm:gap-6">
+        {["EXCEL", "WORD", "PPT", "PDF"].map(f => (
+          <button key={f} className="p-8 bg-slate-50 border border-slate-100 rounded-[2rem] flex flex-col items-center gap-3 hover:bg-white hover:shadow-xl hover:border-amber-300 group transition-all duration-500 active:scale-95">
+            <Download className="text-slate-300 group-hover:text-amber-600 transition-colors" size={28}/>
+            <span className="text-[11px] font-black uppercase text-slate-400 group-hover:text-slate-800 tracking-widest">{f}</span>
+          </button>
+        ))}
+      </div>
+
+      <div className="pt-12 border-t border-slate-100 flex flex-col sm:flex-row justify-between items-center text-[10px] font-black uppercase tracking-widest text-slate-400 text-left no-print gap-10 sm:gap-0">
+        <div className="flex flex-col items-center sm:items-start">
+          <p className="mb-10 text-slate-500">Judicial Auditor Certification</p>
+          <div className="h-0.5 bg-slate-200 w-48 mb-2"></div>
+          <p className="opacity-40">{t.supervisorName}</p>
+        </div>
+        <div className="flex flex-col items-center sm:items-end">
+          <p className="mb-10 text-slate-500">Official Regional Seal</p>
+          <div className="h-0.5 bg-slate-200 w-48 mb-2"></div>
+          <p className="opacity-40">{t.signature}</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function NotifView({ notifications, t, setView }: any) {
+  return (
+    <div className="max-w-3xl mx-auto space-y-5">
+      {notifications.map((n: any) => (
+        <div key={n.id} className={`p-8 bg-white border-l-[10px] rounded-[2rem] shadow-xl flex gap-6 animate-in slide-in-from-left-6 duration-500 transition-all hover:shadow-2xl hover:-translate-y-1 
+          ${n.type === 'danger' ? 'border-red-600 bg-red-50/30' : 'border-indigo-600'}`}>
+          <div className={`p-4 rounded-2xl shadow-lg border-2 border-white flex-shrink-0 self-start
+            ${n.type === 'danger' ? 'bg-red-600 text-white' : 'bg-indigo-600 text-white'}`}>
+            <ShieldAlert size={28}/>
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex justify-between items-start mb-2">
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest py-1 px-3 bg-white/50 rounded-lg shadow-inner">
+                {n.timestamp}
+              </span>
+            </div>
+            <h4 className="text-xl font-black uppercase text-slate-800 tracking-tight leading-none mb-3 drop-shadow-sm">
+              {n.title}
+            </h4>
+            <p className="text-sm text-slate-500 font-bold leading-relaxed">
+              {n.message}
+            </p>
+            {n.guestId && (
+              <button onClick={() => setView('guestList')} 
+                className="mt-6 px-8 py-3 bg-red-600 hover:bg-red-700 text-white text-[10px] font-black uppercase rounded-2xl shadow-xl shadow-red-200 transition-all active:scale-95 tracking-[2px]">
+                Intercept Details
+              </button>
+            )}
           </div>
         </div>
       ))}
       {notifications.length === 0 && (
-        <div className="text-center py-52">
-           <div className="w-24 h-24 bg-emerald-50 text-emerald-500 rounded-[40px] flex items-center justify-center mx-auto mb-8 shadow-xl">
-              <CheckCircle2 size={48}/>
-           </div>
-           <p className="text-slate-300 font-black uppercase tracking-[0.6em] text-sm select-none opacity-40">ምንም መረጃ አልደረሰም / Standby</p>
-           <p className="text-[11px] font-black text-slate-200 uppercase mt-3 tracking-widest">No Active Reports Receiving in this Jurisdiction</p>
+        <div className="text-center py-40 flex flex-col items-center select-none animate-in fade-in duration-1000">
+          <div className="w-24 h-24 bg-indigo-50 rounded-full flex items-center justify-center mb-6 opacity-30 shadow-inner">
+            <ShieldCheck size={48} className="text-indigo-400"/>
+          </div>
+          <h3 className="text-sm font-black uppercase tracking-[10px] text-slate-300">System Secure</h3>
+          <p className="text-[10px] text-slate-400 font-bold mt-2 uppercase tracking-widest opacity-40">Regional network scanning active</p>
         </div>
       )}
-    </div>
-  );
-}
-
-function PrintFooter({ t }: any) {
-  return (
-    <div className="print-only hidden mt-24 pt-12 border-t-4 border-slate-100 no-break">
-      <div className="grid grid-cols-2 gap-32">
-        <div className="space-y-10">
-          <p className="text-[11px] font-black text-slate-400 uppercase tracking-[0.3em]">የተቆጣጣሪ ፖሊስ ማረጋገጫ / Command Certification</p>
-          <div className="space-y-6">
-             <div className="border-b-2 border-slate-300 pb-2">
-                <span className="text-[13px] font-black uppercase text-slate-800">{t.supervisorName}: ______________________</span>
-             </div>
-             <div className="border-b-2 border-slate-300 pb-2">
-                <span className="text-[13px] font-black uppercase text-slate-800">{t.rank}: ______________________</span>
-             </div>
-          </div>
-        </div>
-        <div className="space-y-10 text-right flex flex-col items-end">
-          <p className="text-[11px] font-black text-slate-400 uppercase tracking-[0.3em]">የመስሪያ ቤቱ ማህተም / Official Stamp</p>
-          <div className="w-48 h-32 border-4 border-slate-100 flex items-center justify-center text-[10px] text-slate-300 font-black uppercase italic rounded-3xl rotate-12 bg-slate-50/50">Intelligence Division Seal</div>
-          <div className="mt-8 border-b-2 border-slate-300 w-full pb-2">
-             <span className="text-[13px] font-black uppercase text-slate-800">{t.signature}: ______________________</span>
-          </div>
-        </div>
-      </div>
-      <div className="mt-24 text-center">
-         <p className="text-[9px] text-slate-400 font-black uppercase tracking-[0.4em]">{t.developerCredit}</p>
-      </div>
-    </div>
-  );
-}
-
-function WantedForm({ t, handleFileUpload, addWanted, newWanted, setNewWanted }: any) {
-  return (
-    <div className="max-w-4xl mx-auto bg-white p-16 rounded-[60px] shadow-2xl border-2 border-slate-100 relative overflow-hidden animate-in fade-in duration-500">
-      <div className="text-center mb-12">
-        <ShieldAlert className="mx-auto mb-6 text-red-600" size={56}/>
-        <h3 className="text-3xl font-black text-slate-900 uppercase tracking-tighter">{t.policeNotice}</h3>
-        <p className="text-[10px] font-bold text-slate-400 mt-2 uppercase tracking-widest">Broadcast Wanted Persons to All Jurisdiction Hotels</p>
-      </div>
-      <form onSubmit={addWanted} className="space-y-10">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
-          <div className="space-y-8">
-            <Input label={t.fullName} value={newWanted.fullName} onChange={(v: string) => setNewWanted({...newWanted, fullName: v})} required icon={<Users size={20}/>} />
-            <Input label={t.crime} value={newWanted.crime} onChange={(v: string) => setNewWanted({...newWanted, crime: v})} required icon={<ShieldAlert size={20}/>} />
-            <div className="space-y-3">
-              <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">{t.description}</label>
-              <textarea 
-                className="w-full bg-slate-50 border-4 border-slate-100 rounded-3xl px-6 py-5 font-black text-sm text-slate-800 outline-none focus:border-red-500 transition-all h-32 custom-scrollbar" 
-                value={newWanted.description} 
-                onChange={e => setNewWanted({...newWanted, description: e.target.value})} 
-                required 
-              />
-            </div>
-          </div>
-          <div className="flex flex-col items-center justify-center border-4 border-dashed border-slate-100 rounded-[50px] p-8 bg-slate-50/50 group hover:border-red-300 transition-all active:scale-98">
-            {newWanted.photo ? (
-              <div className="relative w-full h-80">
-                <img src={newWanted.photo} className="w-full h-full object-cover rounded-[40px] shadow-xl" />
-                <button type="button" onClick={() => setNewWanted({...newWanted, photo: ''})} className="absolute -top-4 -right-4 bg-red-500 text-white p-3 rounded-2xl shadow-lg hover:bg-red-600 transition-all active:scale-90"><X size={20}/></button>
-              </div>
-            ) : (
-              <label className="flex flex-col items-center gap-6 cursor-pointer text-slate-400 group-hover:text-red-500 transition-all">
-                <div className="w-24 h-24 bg-white rounded-full flex items-center justify-center shadow-lg group-hover:scale-110 transition-all">
-                  <ImageIcon size={40}/>
-                </div>
-                <div className="text-center">
-                  <p className="text-[11px] font-black uppercase tracking-widest">Upload Suspect Photo</p>
-                  <p className="text-[9px] font-bold uppercase mt-2 opacity-60">High-Resolution Image Required</p>
-                </div>
-                <input type="file" className="hidden" accept="image/*" onChange={handleFileUpload} />
-              </label>
-            )}
-          </div>
-        </div>
-        <button className="w-full bg-red-600 text-white font-black py-6 rounded-3xl uppercase text-xs shadow-2xl hover:bg-red-700 transition-all tracking-[0.3em] mt-6 flex items-center justify-center gap-4 active:scale-95">
-           ተፈላጊዉን መዝግብ / Register Suspect <Plus size={18}/>
-        </button>
-      </form>
-    </div>
-  );
-}
-
-function HotelDir({ hotels, t, user }: any) {
-  const filtered = useMemo(() => {
-    if (user.role === UserRole.SUPER_POLICE) return hotels;
-    return hotels.filter((h: any) => h.zone === user.zone);
-  }, [hotels, user]);
-
-  return (
-    <div className="space-y-8 animate-in slide-in-from-top-4 duration-500">
-       <div className="mb-4">
-          <h2 className="text-3xl font-black text-slate-900 uppercase tracking-tighter">የሆቴሎች ዝርዝር / Property Oversight</h2>
-          <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mt-1">
-            {user.role === UserRole.SUPER_POLICE ? "Regional Command Oversight" : `${user.zone} Jurisdiction Properties`} • {filtered.length} Connected Feeds
-          </p>
-       </div>
-       <div className="bg-white rounded-[50px] shadow-sm border-4 border-slate-50 overflow-hidden overflow-x-auto custom-scrollbar">
-         <table className="w-full text-left min-w-[900px]">
-           <thead className="bg-slate-100/50 text-[11px] font-black uppercase text-slate-400 tracking-[0.2em] border-b-2 border-slate-100">
-             <tr>
-               <th className="px-10 py-8">Property Profile</th>
-               <th className="px-10 py-8">Jurisdiction</th>
-               <th className="px-10 py-8">Management Data</th>
-               <th className="px-10 py-8">Security receiving</th>
-             </tr>
-           </thead>
-           <tbody className="divide-y-2 divide-slate-50 text-[12px] font-black uppercase text-slate-800">
-             {filtered.map((h: any) => (
-               <tr key={h.id} className="hover:bg-slate-50 transition-all">
-                 <td className="px-10 py-6">
-                    <p className="text-[14px] font-black tracking-tight text-slate-900">{h.name}</p>
-                    <p className="text-[10px] text-slate-400 tracking-widest mt-1.5 uppercase">{h.address}</p>
-                 </td>
-                 <td className="px-10 py-6">
-                    <span className="bg-slate-100 px-5 py-2.5 rounded-2xl text-[10px] font-black text-slate-600 tracking-widest">{h.zone}</span>
-                 </td>
-                 <td className="px-10 py-6 text-slate-500 font-bold">{h.receptionistName}</td>
-                 <td className="px-10 py-6">
-                    <div className="flex items-center gap-3 text-indigo-600 font-black tracking-[0.2em]">
-                       <Phone size={14}/> {h.phoneNumber}
-                    </div>
-                 </td>
-               </tr>
-             ))}
-           </tbody>
-         </table>
-       </div>
-    </div>
-  );
-}
-
-function ReportSection({ t, guests, user, GOLDEN_GRADIENT }: any) {
-  const [activeReport, setActiveReport] = useState('daily');
-  const intervals = [
-    { id: 'daily', label: 'Daily (24H)', am: 'የቀን' },
-    { id: '3months', label: '3 Months', am: 'የ3 ወር' },
-    { id: '6months', label: '6 Months', am: 'የ6 ወር' },
-    { id: '9months', label: '9 Months', am: 'የ9 ወር' },
-    { id: 'annual', label: 'Annual (1Y)', am: 'የአመት' }
-  ];
-
-  return (
-    <div className="bg-white p-16 rounded-[60px] shadow-sm border-2 border-slate-100 text-center space-y-16 no-print relative overflow-hidden animate-in fade-in duration-500">
-      <div className="absolute top-0 left-0 w-full h-3 bg-gradient-to-r from-amber-600 via-yellow-400 to-amber-700"></div>
-      <div className="flex flex-col items-center">
-         <div className="w-24 h-24 bg-amber-50 rounded-[40px] flex items-center justify-center text-amber-500 mb-8 shadow-sm">
-            <FileBarChart size={48} />
-         </div>
-         <h3 className={`text-4xl uppercase ${GOLDEN_GRADIENT} tracking-tighter`}>የስራ አፈፃፀም ሪፖርቶች / Security Audits</h3>
-         <p className="text-[11px] font-black text-slate-400 uppercase tracking-[0.4em] mt-3">{t.developedBy}</p>
-      </div>
-
-      <div className="space-y-6">
-         <p className="text-[11px] font-black text-slate-500 uppercase tracking-[0.3em] mb-6">Select Registry Receiving Interval</p>
-         <div className="flex flex-wrap justify-center gap-4">
-            {intervals.map(itv => (
-              <button key={itv.id} onClick={() => setActiveReport(itv.id)} className={`px-8 py-4 rounded-[30px] text-[11px] font-black uppercase tracking-widest transition-all active:scale-95 ${activeReport === itv.id ? 'bg-slate-900 text-white shadow-2xl scale-110 ring-4 ring-slate-100' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'}`}>
-                 {itv.am} / {itv.label}
-              </button>
-            ))}
-         </div>
-      </div>
-
-      <div className="space-y-8">
-         <p className="text-[11px] font-black text-slate-500 uppercase tracking-[0.3em] mb-8">Export Intelligence documentation</p>
-         <div className="grid grid-cols-2 lg:grid-cols-4 gap-8 max-w-5xl mx-auto">
-           {[
-             { name: "EXCEL", color: "text-emerald-600", bg: "bg-emerald-50", am: "ኤክሴል", icon: <FileText size={40}/> },
-             { name: "WORD", color: "text-blue-600", bg: "bg-blue-50", am: "ዎርድ", icon: <FileText size={40}/> },
-             { name: "PPT", color: "text-orange-600", bg: "bg-orange-50", am: "ፒፒቲ", icon: <FileText size={40}/> },
-             { name: "PDF", color: "text-red-600", bg: "bg-red-50", am: "ፒዲኤፍ", icon: <Printer size={40}/> }
-           ].map(f => (
-             <button key={f.name} onClick={() => window.print()} className={`p-10 ${f.bg} border-4 border-transparent rounded-[50px] flex flex-col items-center gap-6 hover:border-amber-400 group transition-all shadow-sm hover:shadow-2xl active:scale-95`}>
-               <div className={`${f.color} group-hover:scale-125 group-hover:-rotate-12 transition-all duration-500`}>{f.icon}</div>
-               <div className="text-center">
-                  <p className="text-[13px] font-black uppercase text-slate-900 tracking-widest">{f.name}</p>
-                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter mt-1">{f.am}</p>
-               </div>
-             </button>
-           ))}
-         </div>
-      </div>
-    </div>
-  );
-}
-
-function UtilityView({ t, GOLDEN_GRADIENT }: any) {
-  return (
-    <div className="bg-white p-20 rounded-[60px] shadow-sm border-2 border-slate-100 space-y-12 relative overflow-hidden animate-in fade-in duration-500">
-      <div className="absolute top-0 right-0 w-96 h-96 bg-amber-500/5 rounded-full -mr-48 -mt-48 blur-3xl"></div>
-      <div className="text-center">
-         <div className="w-24 h-24 bg-slate-900 rounded-[40px] flex items-center justify-center text-amber-500 mx-auto mb-10 shadow-2xl transition-transform hover:rotate-12">
-            <Info size={48}/>
-         </div>
-         <h3 className={`text-5xl text-center tracking-tighter uppercase ${GOLDEN_GRADIENT}`}>{t.appUtility}</h3>
-         <p className="text-[11px] font-black text-slate-400 uppercase tracking-[0.5em] mt-4">Official intelligence oversight receiving</p>
-      </div>
-      <div className="max-w-3xl mx-auto">
-         <p className="text-slate-700 font-black leading-[2.2] uppercase text-[15px] tracking-tight text-center md:text-justify opacity-90">{t.utilityText}</p>
-      </div>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-12 pt-16 border-t-2 border-slate-50">
-         {[
-           { icon: <ShieldCheck size={32}/>, label: "Intelligence Security", text: "Encrypted regional receiving protocols" },
-           { icon: <DownloadCloud size={32}/>, label: "Real-time sync", text: "Instant jurisdiction-based intelligence routing" },
-           { icon: <TrendingUp size={32}/>, label: "receiving reports", text: "Automated periodic audit receiving" }
-         ].map(item => (
-           <div key={item.label} className="text-center space-y-4 group cursor-default">
-              <div className="text-amber-500 mx-auto group-hover:scale-125 group-hover:rotate-12 transition-all duration-500">{item.icon}</div>
-              <p className="text-[12px] font-black uppercase text-slate-900 tracking-widest">{item.label}</p>
-              <p className="text-[10px] font-bold text-slate-400 uppercase leading-relaxed max-w-[200px] mx-auto">{item.text}</p>
-           </div>
-         ))}
-      </div>
     </div>
   );
 }
