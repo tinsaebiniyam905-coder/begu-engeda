@@ -12,7 +12,9 @@ export interface UserAccount {
   password: string;
   username: string;
   role: UserRole;
+  isVerified: boolean;
   isProfileComplete: boolean;
+  otpCode?: string;
 }
 
 export interface HotelProfile {
