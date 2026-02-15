@@ -12,8 +12,10 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
 } from 'recharts';
 
-const LOGO_PATH = 'https://raw.githubusercontent.com/Anu-Anu/Begu-Engeda/main/logo.png';
-const GOLDEN_GRADIENT = "text-transparent bg-clip-text bg-gradient-to-r from-amber-600 via-yellow-400 to-amber-700 font-black drop-shadow-sm";
+// High-quality professional police badge logo
+const LOGO_PATH = 'https://img.icons8.com/fluency/512/police-badge.png';
+// Refined metallic golden gradient
+const GOLDEN_GRADIENT = "text-transparent bg-clip-text bg-gradient-to-r from-yellow-600 via-amber-400 to-yellow-700 font-black drop-shadow-[0_1.2px_1.2px_rgba(0,0,0,0.2)]";
 
 const ZONES_AM = [
   "መተከል ዞን", 
@@ -122,7 +124,6 @@ export default function App() {
       setIsSyncing(false);
       let role: UserRole | null = null;
 
-      // Logic to distinguish roles based on specific username/password combinations
       if (id === 'reception' && pw === '1234') {
         role = UserRole.RECEPTION;
       } else if (id === 'police' && pw === '1234') {
@@ -203,10 +204,8 @@ export default function App() {
     if (currentUser?.role === UserRole.SUPER_POLICE) {
       // Sees everything
     } else if (currentUser?.role === UserRole.LOCAL_POLICE) {
-      // Only sees guests in their selected zone
       list = guests.filter(g => g.hotelZone === policeProfile.zone);
     } else if (currentUser?.role === UserRole.RECEPTION) {
-      // Only sees guests in their hotel
       list = guests.filter(g => g.hotelName === hotelProfile.name);
     }
     return list.filter(g => g.fullName.toLowerCase().includes(searchTerm.toLowerCase()));
@@ -217,10 +216,13 @@ export default function App() {
   if (authState !== 'authenticated') {
     return (
       <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4 font-sans">
-        <div className="bg-white rounded-[2rem] shadow-2xl p-8 sm:p-10 w-full max-w-md animate-in zoom-in-95 duration-200">
-          <img src={LOGO_PATH} className="w-16 h-16 mx-auto mb-4" onError={(e) => { e.currentTarget.src = "https://img.icons8.com/color/512/police-badge.png" }} />
-          <h1 className={`text-2xl text-center mb-1 ${GOLDEN_GRADIENT}`}>{t.appName}</h1>
-          <p className="text-[10px] font-black text-gray-400 text-center uppercase mb-8 tracking-widest">{t.developedBy}</p>
+        <div className="bg-white rounded-[2.5rem] shadow-2xl p-8 sm:p-12 w-full max-w-md animate-in zoom-in-95 duration-300">
+          <div className="relative group mb-6">
+            <div className="absolute -inset-1 bg-gradient-to-r from-amber-400 to-yellow-600 rounded-full blur opacity-25 group-hover:opacity-50 transition duration-1000 group-hover:duration-200"></div>
+            <img src={LOGO_PATH} className="relative w-24 h-24 mx-auto drop-shadow-lg" />
+          </div>
+          <h1 className={`text-3xl text-center mb-1 ${GOLDEN_GRADIENT}`}>{t.appName}</h1>
+          <p className="text-[10px] font-black text-gray-400 text-center uppercase mb-10 tracking-[0.2em]">{t.developedBy}</p>
           
           {authState === 'login' && (
             <form onSubmit={handleLogin} className="space-y-4">
@@ -229,7 +231,7 @@ export default function App() {
               <button 
                 type="submit"
                 disabled={isSyncing || !loginData.identifier || !loginData.password} 
-                className={`w-full font-black py-4 rounded-lg shadow-lg transition-all uppercase text-xs tracking-widest mt-4 flex items-center justify-center gap-3 active:scale-[0.98] 
+                className={`w-full font-black py-4 rounded-xl shadow-lg transition-all uppercase text-xs tracking-widest mt-4 flex items-center justify-center gap-3 active:scale-[0.98] 
                 ${(!loginData.identifier || !loginData.password) ? 'bg-slate-200 text-slate-400 cursor-not-allowed' : 'bg-slate-900 hover:bg-slate-800 text-white'}`}>
                 {isSyncing ? <Activity size={16} className="animate-spin" /> : <ShieldCheck size={16} />}
                 {isSyncing ? "Verifying..." : t.login}
@@ -286,8 +288,9 @@ export default function App() {
       <aside className={`fixed md:relative z-50 w-64 h-full bg-[#0F172A] text-white flex flex-col transition-all duration-300 
         ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}>
         <div className="p-8 border-b border-white/5 text-center">
-          <img src={LOGO_PATH} className="w-12 h-12 mx-auto mb-3" />
-          <h2 className={`text-lg font-bold ${GOLDEN_GRADIENT}`}>{t.appName}</h2>
+          <img src={LOGO_PATH} className="w-16 h-16 mx-auto mb-4 drop-shadow-md" />
+          <h2 className={`text-xl font-bold ${GOLDEN_GRADIENT}`}>{t.appName}</h2>
+          <div className="mt-1 h-0.5 w-12 bg-amber-500/30 mx-auto rounded-full"></div>
         </div>
         <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
           <NavButton icon={<LayoutDashboard size={16}/>} label={t.dashboard} active={view === 'dashboard'} onClick={() => {setView('dashboard'); setIsSidebarOpen(false);}} />
@@ -329,7 +332,7 @@ export default function App() {
                    </p>
                    <p className="text-[8px] text-amber-600 font-bold uppercase text-left">{currentUser?.role.replace('_', ' ')}</p>
                 </div>
-                <div className="w-8 h-8 bg-slate-900 rounded flex items-center justify-center text-white font-black text-xs">{currentUser?.username[0].toUpperCase()}</div>
+                <div className="w-8 h-8 bg-slate-900 rounded-lg flex items-center justify-center text-white font-black text-xs shadow-md">{currentUser?.username[0].toUpperCase()}</div>
              </div>
           </div>
         </header>
@@ -425,7 +428,7 @@ export default function App() {
             {view === 'notifications' && <NotificationsFeed notifications={notifications} t={t} setView={setView} />}
             
             {view === 'settings' && (
-              <div className="max-w-md mx-auto bg-white p-10 rounded-[2rem] shadow-xl border border-slate-100">
+              <div className="max-w-md mx-auto bg-white p-10 rounded-[2.5rem] shadow-xl border border-slate-100">
                 <h3 className="text-lg font-black mb-6 uppercase text-center">{t.settings}</h3>
                 <div className="space-y-4">
                   <div className="p-5 bg-slate-50 rounded-xl border border-slate-200">
@@ -464,7 +467,7 @@ function DashboardView({ t, guests, notifications, wanted, setView }: any) {
               <p className="text-[9px] font-black text-slate-400 uppercase mb-0.5 text-left">{s.l}</p>
               <p className="text-3xl font-black text-slate-900 text-left">{s.v}</p>
             </div>
-            <div className={`${s.c} w-10 h-10 rounded-lg flex items-center justify-center text-white shadow-md group-hover:rotate-6 transition-all`}>
+            <div className={`${s.c} w-10 h-10 rounded-xl flex items-center justify-center text-white shadow-md group-hover:rotate-6 transition-all`}>
               {s.icon}
             </div>
           </div>
@@ -568,8 +571,11 @@ function GuestEntryForm({ onSubmit, newGuest, setNewGuest, t }: any) {
 function AppUtility({ t }: any) {
   return (
     <div className="bg-white p-10 rounded-[3rem] shadow-xl border border-slate-100 text-center max-w-3xl mx-auto">
-      <img src={LOGO_PATH} className="w-20 h-20 mx-auto mb-6 opacity-30" />
-      <h3 className={`text-2xl leading-tight mb-6 ${GOLDEN_GRADIENT} text-center`}>{t.appUtility}</h3>
+      <div className="relative inline-block mb-6">
+        <div className="absolute inset-0 bg-amber-400/20 blur-xl rounded-full"></div>
+        <img src={LOGO_PATH} className="relative w-24 h-24 mx-auto" />
+      </div>
+      <h3 className={`text-3xl leading-tight mb-6 ${GOLDEN_GRADIENT} text-center`}>{t.appUtility}</h3>
       <p className="text-slate-700 font-bold leading-relaxed text-base sm:text-lg text-justify border-l-4 border-amber-400 pl-6 py-2 bg-slate-50/50 rounded-r-2xl">
         {t.utilityText}
       </p>
