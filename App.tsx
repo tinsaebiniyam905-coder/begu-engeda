@@ -5,7 +5,7 @@ import {
   Users, UserPlus, AlertTriangle, FileText, LogOut, Bell, Camera, Image as ImageIcon, Download, 
   Printer, Globe, Plus, Settings, Edit, X, Maximize2, CheckCircle2, ShieldCheck, Search, MapPin, 
   Building2, FileBarChart, Menu, Info, ChevronRight, ShieldAlert, History, TrendingUp, Activity, 
-  Phone, Fingerprint, Map, Share2, Send, ExternalLink
+  Phone, Fingerprint, Map, Share2, Send, ExternalLink, Lock
 } from 'lucide-react';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend, AreaChart, Area
@@ -30,7 +30,7 @@ const GOLDEN_GRADIENT = "text-transparent bg-clip-text bg-gradient-to-r from-amb
 
 export default function App() {
   const [lang, setLang] = useState<Language>('am');
-  const [user, setUser] = useState<{ role: UserRole; username: string; zone?: string } | null>(null);
+  const [user, setUser] = useState<{ role: UserRole; username: string; zone?: string; isConfirmed?: boolean } | null>(null);
   const [guests, setGuests] = useState<Guest[]>(() => JSON.parse(localStorage.getItem('guests') || '[]'));
   const [wanted, setWanted] = useState<WantedPerson[]>(() => JSON.parse(localStorage.getItem('wanted') || JSON.stringify(INITIAL_WANTED)));
   const [notifications, setNotifications] = useState<Notification[]>(() => JSON.parse(localStorage.getItem('notifications') || '[]'));
@@ -57,10 +57,19 @@ export default function App() {
       setUser({ role: UserRole.RECEPTION, username: 'reception' });
       setView('setupHotel');
     } else if (loginData.username === 'police' && loginData.password === '1234') {
-      setUser({ role: UserRole.LOCAL_POLICE, username: 'police' });
-      setView('setupPolice');
+      // Load saved police jurisdiction if exists
+      const savedJurisdiction = localStorage.getItem('police_jurisdiction');
+      const isConfirmed = localStorage.getItem('police_jurisdiction_confirmed') === 'true';
+      setUser({ 
+        role: UserRole.LOCAL_POLICE, 
+        username: 'police', 
+        zone: savedJurisdiction || undefined,
+        isConfirmed
+      });
+      setView(isConfirmed ? 'dashboard' : 'setupPolice');
     } else if (loginData.username === 'police' && loginData.password === 'police@1234') {
-      setUser({ role: UserRole.SUPER_POLICE, username: 'police_hq' });
+      setUser({ role: UserRole.SUPER_POLICE, username: 'police_hq', isConfirmed: true });
+      setView('dashboard');
     } else alert('Invalid credentials / የተሳሳተ መረጃ');
   };
 
@@ -94,7 +103,7 @@ export default function App() {
     };
     setGuests([guest, ...guests]);
     
-    // Automatic Report to Police Notification
+    // Automatic Report to Police Notification (Specific routing handled in visibility)
     const policeReportNotif: Notification = {
       id: Date.now().toString() + '_reg',
       title: 'New Guest Registration',
@@ -117,7 +126,6 @@ export default function App() {
         guestId: guest.id
       };
       setNotifications(prev => [wantedNotif, ...prev]);
-      alert(t.alertWantedFound + " - " + guest.fullName);
     }
     setNewGuest({ fullName: '', nationality: '', roomNumber: '', idPhoto: '' });
     setView('guestList');
@@ -155,10 +163,23 @@ export default function App() {
   const visibleGuests = useMemo(() => {
     let list = guests;
     if (user?.role === UserRole.LOCAL_POLICE && user.zone) {
+      // STRICT ROUTING: Local police only see guests from their specific zone
       list = guests.filter(g => g.hotelZone === user.zone);
+    } else if (user?.role === UserRole.RECEPTION) {
+      // Reception only sees their own property guests
+      list = guests.filter(g => g.hotelId === hotelProfile.id);
     }
+    // SUPER_POLICE see everything
     return list.filter(g => g.fullName.toLowerCase().includes(searchTerm.toLowerCase()));
-  }, [guests, user, searchTerm]);
+  }, [guests, user, searchTerm, hotelProfile.id]);
+
+  const filteredNotifications = useMemo(() => {
+    if (user?.role === UserRole.SUPER_POLICE) return notifications;
+    if (user?.role === UserRole.LOCAL_POLICE && user.zone) {
+      return notifications.filter(n => n.targetZone === user.zone);
+    }
+    return []; // Receptions don't see security notifications by default unless found
+  }, [notifications, user]);
 
   const handleShare = (guest: Guest, platform: 'telegram' | 'whatsapp') => {
     const text = `*Police Notification - Begu Engeda*\n\nGuest: ${guest.fullName}\nNationality: ${guest.nationality}\nHotel: ${guest.hotelName}\nRoom: ${guest.roomNumber}\nZone: ${guest.hotelZone}\nCheck-in: ${guest.checkInDate}\n\nRegistered via Benishangul Gumuz Police System.`;
@@ -226,7 +247,7 @@ export default function App() {
               <NavItem icon={<FileBarChart size={20}/>} label={t.reports} active={view === 'reports'} onClick={() => setView('reports')} />
             </>
           )}
-          <NavItem icon={<Bell size={20}/>} label={t.notifications} active={view === 'notifications'} count={notifications.filter(n => !user.zone || n.targetZone === user.zone).length} onClick={() => setView('notifications')} />
+          <NavItem icon={<Bell size={20}/>} label={t.notifications} active={view === 'notifications'} count={filteredNotifications.length} onClick={() => setView('notifications')} />
           <NavItem icon={<Info size={20}/>} label={t.appUtility} active={view === 'utility'} onClick={() => setView('utility')} />
         </nav>
         <div className="p-6 border-t border-white/5 text-center bg-slate-800/50">
@@ -244,7 +265,9 @@ export default function App() {
           <div className="flex items-center gap-6">
              <div className="text-right leading-none hidden sm:block">
                 <p className="text-xs font-black text-slate-900 uppercase tracking-tight">{user.username}</p>
-                <p className="text-[10px] text-amber-600 font-bold uppercase mt-1 tracking-tighter">{user.zone || "Police Headquarters"}</p>
+                <p className="text-[10px] text-amber-600 font-bold uppercase mt-1 tracking-tighter">
+                   {user.zone ? user.zone : "Assigning..."} {user.isConfirmed && <Lock size={10} className="inline ml-1 opacity-50"/>}
+                </p>
              </div>
              <div className="w-10 h-10 bg-amber-500 rounded-xl text-white flex items-center justify-center font-black shadow-lg shadow-amber-500/20">{user.username[0].toUpperCase()}</div>
           </div>
@@ -262,16 +285,16 @@ export default function App() {
 
           <div className="space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-500">
             {view === 'setupHotel' && <SetupForm hotelProfile={hotelProfile} setHotelProfile={setHotelProfile} onSubmit={handleSetupSubmit} t={t} />}
-            {view === 'setupPolice' && <JurisdictionSetup ZONES={ZONES} setUser={setUser} user={user} setView={setView} />}
+            {view === 'setupPolice' && <JurisdictionSetup ZONES={ZONES} setUser={setUser} user={user} setView={setView} t={t} />}
             
-            {view === 'dashboard' && <Dashboard user={user} t={t} guests={visibleGuests} notifications={notifications} wanted={wanted} setView={setView} />}
-            {view === 'guestList' && <ListView items={visibleGuests} t={t} setZoomImg={setZoomImg} handleShare={handleShare} />}
+            {view === 'dashboard' && <Dashboard user={user} t={t} guests={visibleGuests} notifications={filteredNotifications} wanted={wanted} setView={setView} />}
+            {view === 'guestList' && <ListView items={visibleGuests} t={t} setZoomImg={setZoomImg} handleShare={handleShare} user={user} />}
             {view === 'registerGuest' && <GuestForm newGuest={newGuest} setNewGuest={setNewGuest} onSubmit={saveGuest} t={t} handleFileUpload={handleFileUpload} />}
             {view === 'addWanted' && <WantedForm wanted={wanted} setWanted={setWanted} t={t} handleFileUpload={handleFileUpload} addWanted={addWanted} newWanted={newWanted} setNewWanted={setNewWanted} />}
-            {view === 'hotelDirectory' && <HotelDir hotels={allHotels} t={t} />}
+            {view === 'hotelDirectory' && <HotelDir hotels={allHotels} t={t} user={user} />}
             {view === 'utility' && <UtilityView t={t} GOLDEN_GRADIENT={GOLDEN_GRADIENT} />}
             {view === 'reports' && <ReportSection t={t} guests={visibleGuests} user={user} GOLDEN_GRADIENT={GOLDEN_GRADIENT} />}
-            {view === 'notifications' && <NotifView notifications={notifications.filter(n => !user.zone || n.targetZone === user.zone)} t={t} setView={setView} />}
+            {view === 'notifications' && <NotifView notifications={filteredNotifications} t={t} setView={setView} />}
             {view === 'settings' && <SetupForm hotelProfile={hotelProfile} setHotelProfile={setHotelProfile} onSubmit={handleSetupSubmit} t={t} isSettings />}
           </div>
 
@@ -326,7 +349,7 @@ function Dashboard({ t, guests, notifications, wanted, setView, user }: any) {
   const stats = [
     { l: t.guestList, v: guests.length, c: 'bg-blue-600', icon: <Users size={20}/> },
     { l: t.wantedPersons, v: wanted.length, c: 'bg-red-600', icon: <ShieldAlert size={20}/> },
-    { l: t.notifications, v: notifications.filter((n: any) => !user.zone || n.targetZone === user.zone).length, c: 'bg-amber-600', icon: <Bell size={20}/> }
+    { l: t.notifications, v: notifications.length, c: 'bg-amber-600', icon: <Bell size={20}/> }
   ];
   
   const chartData = [
@@ -437,22 +460,49 @@ function SetupForm({ hotelProfile, setHotelProfile, onSubmit, t, isSettings }: a
   );
 }
 
-function JurisdictionSetup({ ZONES, setUser, user, setView }: any) {
+function JurisdictionSetup({ ZONES, setUser, user, setView, t }: any) {
+  const [tempZone, setTempZone] = useState<string | undefined>(user.zone);
+  const [isConfirming, setIsConfirming] = useState(false);
+
+  const handleConfirm = () => {
+    if (!tempZone) return;
+    localStorage.setItem('police_jurisdiction', tempZone);
+    localStorage.setItem('police_jurisdiction_confirmed', 'true');
+    setUser({...user, zone: tempZone, isConfirmed: true});
+    setView('dashboard');
+  };
+
   return (
     <div className="max-w-2xl mx-auto bg-white p-10 rounded-3xl shadow-xl border-2 border-slate-100">
       <div className="text-center mb-10">
          <ShieldCheck className="mx-auto mb-4 text-indigo-600" size={48}/>
-         <h3 className="text-2xl font-black text-slate-800 uppercase tracking-tighter">Police Jurisdiction Assignment</h3>
+         <h3 className="text-2xl font-black text-slate-800 uppercase tracking-tighter">{t.selectJurisdiction}</h3>
          <p className="text-xs text-slate-400 font-bold mt-2">Select your assigned command post</p>
       </div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        {ZONES.map((z: string) => (
-          <button key={z} onClick={() => { setUser({...user, zone: z}); setView('dashboard'); }} className="text-left p-6 bg-slate-50 border-2 border-transparent rounded-2xl font-black text-slate-600 hover:bg-amber-50 hover:border-amber-500 hover:text-amber-700 transition-all flex items-center justify-between group">
-            <span className="text-sm uppercase tracking-tight">{z}</span>
-            <ChevronRight className="text-slate-300 group-hover:text-amber-500 transition-all" size={20}/>
-          </button>
-        ))}
-      </div>
+      
+      {!isConfirming ? (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {ZONES.map((z: string) => (
+            <button key={z} onClick={() => { setTempZone(z); setIsConfirming(true); }} className={`text-left p-6 bg-slate-50 border-2 rounded-2xl font-black text-slate-600 hover:bg-amber-50 hover:border-amber-500 hover:text-amber-700 transition-all flex items-center justify-between group ${tempZone === z ? 'border-amber-500 bg-amber-50 text-amber-700' : 'border-transparent'}`}>
+              <span className="text-sm uppercase tracking-tight">{z}</span>
+              <ChevronRight className="text-slate-300 group-hover:text-amber-500 transition-all" size={20}/>
+            </button>
+          ))}
+        </div>
+      ) : (
+        <div className="space-y-8 animate-in zoom-in-95 duration-300">
+          <div className="p-8 bg-amber-50 rounded-3xl border-4 border-amber-100 text-center">
+            <Lock className="mx-auto mb-4 text-amber-500" size={32}/>
+            <h4 className="text-xl font-black text-slate-800 uppercase mb-2">{t.confirmJurisdiction}</h4>
+            <p className="text-2xl font-black text-amber-600 uppercase mb-6">{tempZone}</p>
+            <p className="text-xs text-slate-500 font-bold leading-relaxed mb-6 uppercase tracking-tighter">{t.jurisdictionWarning}</p>
+            <div className="flex gap-4">
+               <button onClick={() => setIsConfirming(false)} className="flex-1 py-4 bg-white border-2 border-slate-100 rounded-xl text-xs font-black uppercase text-slate-400 hover:bg-slate-50 transition-all">Back</button>
+               <button onClick={handleConfirm} className="flex-1 py-4 bg-slate-900 text-white rounded-xl text-xs font-black uppercase tracking-widest shadow-xl hover:bg-slate-800 transition-all">{t.confirmBtn}</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -469,13 +519,15 @@ function Input({ label, value, onChange, type = "text", required, icon }: any) {
   );
 }
 
-function ListView({ items, t, setZoomImg, handleShare }: any) {
+function ListView({ items, t, setZoomImg, handleShare, user }: any) {
   return (
     <div className="space-y-6">
        <div className="flex justify-between items-end mb-2 no-print">
           <div>
              <h2 className="text-2xl font-black text-slate-800 uppercase tracking-tighter">Registry Database</h2>
-             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Total Active Records: {items.length}</p>
+             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+               {user.role === UserRole.SUPER_POLICE ? "Global Oversight" : `${user.zone} Jurisdiction Records`} • Count: {items.length}
+             </p>
           </div>
           <button onClick={() => window.print()} className="flex items-center gap-2 bg-white border-2 border-slate-100 px-6 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest text-slate-600 hover:border-amber-500 transition-all shadow-sm">
              <Printer size={16}/> {t.print}
@@ -635,12 +687,19 @@ function WantedForm({ addWanted, newWanted, setNewWanted, t, handleFileUpload }:
   );
 }
 
-function HotelDir({ hotels, t }: any) {
+function HotelDir({ hotels, t, user }: any) {
+  const filteredHotels = useMemo(() => {
+    if (user.role === UserRole.SUPER_POLICE) return hotels;
+    return hotels.filter((h: any) => h.zone === user.zone);
+  }, [hotels, user]);
+
   return (
     <div className="space-y-6">
        <div className="mb-2">
           <h2 className="text-2xl font-black text-slate-800 uppercase tracking-tighter">Hotel Directory</h2>
-          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Connected Regional Properties: {hotels.length}</p>
+          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+            {user.role === UserRole.SUPER_POLICE ? "Regional Oversight" : `${user.zone} Jurisdiction`} • Property Count: {filteredHotels.length}
+          </p>
        </div>
        <div className="bg-white rounded-3xl shadow-sm border-2 border-slate-100 overflow-hidden overflow-x-auto">
          <table className="w-full text-left min-w-[800px]">
@@ -653,7 +712,7 @@ function HotelDir({ hotels, t }: any) {
              </tr>
            </thead>
            <tbody className="divide-y divide-slate-50 text-[11px] font-black uppercase text-slate-700">
-             {hotels.map((h: any) => (
+             {filteredHotels.map((h: any) => (
                <tr key={h.id} className="hover:bg-slate-50/50 transition-all">
                  <td className="px-8 py-5">
                     <p className="text-[12px] font-black tracking-tight text-slate-900">{h.name}</p>
@@ -666,7 +725,7 @@ function HotelDir({ hotels, t }: any) {
                  <td className="px-8 py-5 text-indigo-600 font-black tracking-widest">{h.phoneNumber}</td>
                </tr>
              ))}
-             {hotels.length === 0 && <tr><td colSpan={4} className="px-8 py-20 text-center text-slate-300 font-black uppercase tracking-widest text-sm select-none opacity-40">No Registered Properties</td></tr>}
+             {filteredHotels.length === 0 && <tr><td colSpan={4} className="px-8 py-20 text-center text-slate-300 font-black uppercase tracking-widest text-sm select-none opacity-40">No Registered Properties in this Jurisdiction</td></tr>}
            </tbody>
          </table>
        </div>
