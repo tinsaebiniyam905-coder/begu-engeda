@@ -6,7 +6,7 @@ import {
   Users, UserPlus, AlertTriangle, FileText, LogOut, Bell, Camera, Image as ImageIcon, Download, 
   Printer, Globe, Plus, Settings, Edit, X, Maximize2, CheckCircle2, ShieldCheck, Search, MapPin, 
   Building2, FileBarChart, Menu, Info, ShieldAlert, TrendingUp, Activity, 
-  Phone, Fingerprint, Map, LayoutDashboard, Save, UserCircle, Key, ChevronRight, Cloud
+  Phone, Fingerprint, Map, LayoutDashboard, Save, UserCircle, Key, ChevronRight, Cloud, User
 } from 'lucide-react';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
@@ -14,12 +14,16 @@ import {
 
 const LOGO_PATH = 'https://raw.githubusercontent.com/Anu-Anu/Begu-Engeda/main/logo.png';
 const GOLDEN_GRADIENT = "text-transparent bg-clip-text bg-gradient-to-r from-amber-600 via-yellow-400 to-amber-700 font-black drop-shadow-sm";
-const ZONES = ["Assosa Zone", "Kamashi Zone", "Metekel Zone", "Mao Komo Special Woreda", "Assosa City Administration","kamash City Administration","Bambasi City Administration", "Gilgel Beles City Administration"];
 
-// Updated Authorized Accounts with specific credentials requested
-const AUTHORIZED_ACCOUNTS: UserAccount[] = [
-  { username: 'police', phoneNumber: 'admin_hq', password: 'police@1234', role: UserRole.SUPER_POLICE, isVerified: true, isProfileComplete: false },
-  { username: 'reception', phoneNumber: 'admin_rec', password: '1234', role: UserRole.RECEPTION, isVerified: true, isProfileComplete: false }
+const ZONES_AM = [
+  "መተከል ዞን", 
+  "አሶሳ ዞን", 
+  "ካማሽ ዞን", 
+  "አሶሳ ከተማ አስ/ር", 
+  "ግልገል በለስ ከተማ አስተዳደር", 
+  "ካማሽ ከተማ አስተዳደር", 
+  "ባምባሲ ከተማ አስተዳደር", 
+  "ማዖና ኮሞ ልዩ ወረዳ"
 ];
 
 // --- REFINED UI COMPONENTS ---
@@ -77,51 +81,65 @@ export default function App() {
 
   useEffect(() => {
     if (currentUser) {
-      if (!currentUser.isProfileComplete) {
-        setAuthState(currentUser.role === UserRole.RECEPTION ? 'setup_hotel' : 'setup_police');
+      const savedHotel = JSON.parse(localStorage.getItem(`begu_profile_hotel_${currentUser.username}_${currentUser.role}`) || 'null');
+      const savedPolice = JSON.parse(localStorage.getItem(`begu_profile_police_${currentUser.username}_${currentUser.role}`) || 'null');
+      
+      if (currentUser.role === UserRole.RECEPTION) {
+        if (!savedHotel) setAuthState('setup_hotel');
+        else { setHotelProfile(savedHotel); setAuthState('authenticated'); }
+      } else if (currentUser.role === UserRole.LOCAL_POLICE) {
+        if (!savedPolice) setAuthState('setup_police');
+        else { setPoliceProfile(savedPolice); setAuthState('authenticated'); }
       } else {
         setAuthState('authenticated');
       }
     }
-  }, []);
+  }, [currentUser]);
 
   useEffect(() => {
     localStorage.setItem('begu_guests', JSON.stringify(guests));
     localStorage.setItem('begu_wanted', JSON.stringify(wanted));
     localStorage.setItem('begu_notifications', JSON.stringify(notifications));
-    localStorage.setItem('begu_currentHotel', JSON.stringify(hotelProfile));
-    localStorage.setItem('begu_currentPolice', JSON.stringify(policeProfile));
-    if (currentUser) localStorage.setItem('begu_active_session', JSON.stringify(currentUser));
-    else localStorage.removeItem('begu_active_session');
+    if (currentUser) {
+      localStorage.setItem('begu_active_session', JSON.stringify(currentUser));
+      if (currentUser.role === UserRole.RECEPTION) {
+        localStorage.setItem(`begu_profile_hotel_${currentUser.username}_${currentUser.role}`, JSON.stringify(hotelProfile));
+      } else if (currentUser.role === UserRole.LOCAL_POLICE) {
+        localStorage.setItem(`begu_profile_police_${currentUser.username}_${currentUser.role}`, JSON.stringify(policeProfile));
+      }
+    } else {
+      localStorage.removeItem('begu_active_session');
+    }
   }, [guests, wanted, notifications, hotelProfile, policeProfile, currentUser]);
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!loginData.identifier || !loginData.password) return;
+    const id = loginData.identifier.trim().toLowerCase();
+    const pw = loginData.password.trim();
+
     setIsSyncing(true);
     setTimeout(() => {
       setIsSyncing(false);
-      const acc = AUTHORIZED_ACCOUNTS.find(a => 
-        (a.username === loginData.identifier.toLowerCase()) && 
-        a.password === loginData.password
-      );
-      if (acc) {
-        // Load saved profile if it exists for this specific username
-        const savedHotel = JSON.parse(localStorage.getItem(`begu_hotel_${acc.username}`) || 'null');
-        const savedPolice = JSON.parse(localStorage.getItem(`begu_police_${acc.username}`) || 'null');
-        
-        if (savedHotel) setHotelProfile(savedHotel);
-        if (savedPolice) setPoliceProfile(savedPolice);
+      let role: UserRole | null = null;
 
-        const updatedAcc = {
-          ...acc,
-          isProfileComplete: acc.role === UserRole.RECEPTION ? !!savedHotel : !!savedPolice
-        };
-        setCurrentUser(updatedAcc);
-        
-        setAuthState(!updatedAcc.isProfileComplete 
-          ? (updatedAcc.role === UserRole.RECEPTION ? 'setup_hotel' : 'setup_police') 
-          : 'authenticated');
+      // Logic to distinguish roles based on specific username/password combinations
+      if (id === 'reception' && pw === '1234') {
+        role = UserRole.RECEPTION;
+      } else if (id === 'police' && pw === '1234') {
+        role = UserRole.LOCAL_POLICE;
+      } else if (id === 'police' && pw === 'police@1234') {
+        role = UserRole.SUPER_POLICE;
+      }
+
+      if (role) {
+        setCurrentUser({
+          username: id,
+          password: pw,
+          phoneNumber: role === UserRole.RECEPTION ? 'rec_phone' : 'pol_phone',
+          role: role,
+          isVerified: true,
+          isProfileComplete: false
+        });
       } else {
         alert(lang === 'am' ? "የተሳሳተ ተጠቃሚ ስም ወይም የይለፍ ቃል!" : "Invalid username or password!");
       }
@@ -135,16 +153,17 @@ export default function App() {
     setLoginData({ identifier: '', password: '' });
   };
 
-  const handleSetupSubmit = (e: React.FormEvent, type: 'hotel' | 'police') => {
+  const handleSetupSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const isComplete = type === 'hotel' ? (hotelProfile.name && hotelProfile.zone) : (policeProfile.name && policeProfile.zone);
-    if (isComplete && currentUser) {
-      const updatedUser = { ...currentUser, isProfileComplete: true };
-      setCurrentUser(updatedUser);
-      if (type === 'hotel') localStorage.setItem(`begu_hotel_${currentUser.username}`, JSON.stringify(hotelProfile));
-      else localStorage.setItem(`begu_police_${currentUser.username}`, JSON.stringify(policeProfile));
-      setAuthState('authenticated');
-    } else alert(lang === 'am' ? "እባክዎን ሁሉንም መረጃዎች ይሙሉ!" : "Please fill all details.");
+    if (currentUser?.role === UserRole.RECEPTION) {
+      if (hotelProfile.name && hotelProfile.address && hotelProfile.zone && hotelProfile.receptionistName && hotelProfile.phoneNumber) {
+        setAuthState('authenticated');
+      } else alert(lang === 'am' ? "እባክዎን ሁሉንም መረጃዎች ይሙሉ!" : "Please fill all details.");
+    } else if (currentUser?.role === UserRole.LOCAL_POLICE) {
+      if (policeProfile.zone) {
+        setAuthState('authenticated');
+      } else alert(lang === 'am' ? "እባክዎን ዞን ይምረጡ!" : "Please select a zone.");
+    }
   };
 
   const saveGuest = (e: React.FormEvent) => {
@@ -157,8 +176,8 @@ export default function App() {
       hotelName: hotelProfile.name,
       hotelAddress: hotelProfile.address,
       hotelZone: hotelProfile.zone,
-      receptionistName: currentUser?.username || '',
-      receptionistPhone: currentUser?.phoneNumber || '',
+      receptionistName: hotelProfile.receptionistName,
+      receptionistPhone: hotelProfile.phoneNumber,
       checkInDate: new Date().toISOString().split('T')[0],
       isWanted: wanted.some(w => w.fullName.toLowerCase() === newGuest.fullName.toLowerCase())
     };
@@ -181,10 +200,13 @@ export default function App() {
 
   const filteredGuests = useMemo(() => {
     let list = guests;
-    // SUPER_POLICE (police/police@1234) sees EVERYTHING (no filtering)
-    if (currentUser?.role === UserRole.LOCAL_POLICE) {
+    if (currentUser?.role === UserRole.SUPER_POLICE) {
+      // Sees everything
+    } else if (currentUser?.role === UserRole.LOCAL_POLICE) {
+      // Only sees guests in their selected zone
       list = guests.filter(g => g.hotelZone === policeProfile.zone);
     } else if (currentUser?.role === UserRole.RECEPTION) {
+      // Only sees guests in their hotel
       list = guests.filter(g => g.hotelName === hotelProfile.name);
     }
     return list.filter(g => g.fullName.toLowerCase().includes(searchTerm.toLowerCase()));
@@ -215,33 +237,36 @@ export default function App() {
             </form>
           )}
 
-          {(authState === 'setup_hotel' || authState === 'setup_police') && (
-            <form onSubmit={(e) => handleSetupSubmit(e, authState === 'setup_hotel' ? 'hotel' : 'police')} className="space-y-4">
-              <h3 className="text-lg font-black text-slate-800 uppercase text-center mb-2">{authState === 'setup_hotel' ? t.setupHotel : t.setupPolice}</h3>
-              <StandardInput 
-                label={authState === 'setup_hotel' ? t.hotel : t.policeOfficeName} 
-                value={authState === 'setup_hotel' ? hotelProfile.name : policeProfile.name} 
-                onChange={(v:any) => authState === 'setup_hotel' ? setHotelProfile({...hotelProfile, name: v}) : setPoliceProfile({...policeProfile, name: v})} 
-                required icon={authState === 'setup_hotel' ? <Building2 size={16}/> : <ShieldCheck size={16}/>} 
-              />
-              <StandardInput 
-                label={authState === 'setup_hotel' ? t.hotelAddress : t.location} 
-                value={authState === 'setup_hotel' ? hotelProfile.address : policeProfile.address} 
-                onChange={(v:any) => authState === 'setup_hotel' ? setHotelProfile({...hotelProfile, address: v}) : setPoliceProfile({...policeProfile, address: v})} 
-                required icon={<MapPin size={16}/>} 
-              />
+          {authState === 'setup_hotel' && (
+            <form onSubmit={handleSetupSubmit} className="space-y-3">
+              <h3 className="text-lg font-black text-slate-800 uppercase text-center mb-2">{t.setupHotel}</h3>
+              <StandardInput label={t.hotel} value={hotelProfile.name} onChange={(v:any) => setHotelProfile({...hotelProfile, name: v})} required icon={<Building2 size={16}/>} />
+              <StandardInput label={t.hotelAddress} value={hotelProfile.address} onChange={(v:any) => setHotelProfile({...hotelProfile, address: v})} required icon={<MapPin size={16}/>} />
               <div className="space-y-1">
                 <label className="text-[10px] font-black text-slate-500 uppercase ml-1">{t.zone}</label>
-                <select className="w-full bg-slate-50 border-2 border-slate-200 rounded-lg px-4 py-3 text-sm font-semibold outline-none focus:border-amber-500 appearance-none" value={authState === 'setup_hotel' ? hotelProfile.zone : policeProfile.zone} onChange={e => authState === 'setup_hotel' ? setHotelProfile({...hotelProfile, zone: e.target.value}) : setPoliceProfile({...policeProfile, zone: e.target.value})} required>
+                <select className="w-full bg-slate-50 border-2 border-slate-200 rounded-lg px-4 py-2.5 text-sm font-semibold outline-none focus:border-amber-500" value={hotelProfile.zone} onChange={e => setHotelProfile({...hotelProfile, zone: e.target.value})} required>
                   <option value="">Select Zone</option>
-                  {ZONES.map(z => <option key={z} value={z}>{z}</option>)}
+                  {ZONES_AM.map(z => <option key={z} value={z}>{z}</option>)}
                 </select>
               </div>
-              <button 
-                type="submit"
-                className="w-full bg-slate-900 hover:bg-slate-800 text-white font-black py-4 rounded-lg uppercase tracking-widest text-xs mt-4 shadow-lg active:scale-[0.98]">
-                {t.save}
-              </button>
+              <StandardInput label={t.receptionistName} value={hotelProfile.receptionistName} onChange={(v:any) => setHotelProfile({...hotelProfile, receptionistName: v})} required icon={<User size={16}/>} />
+              <StandardInput label={t.phoneNumber} value={hotelProfile.phoneNumber} onChange={(v:any) => setHotelProfile({...hotelProfile, phoneNumber: v})} required icon={<Phone size={16}/>} />
+              <button type="submit" className="w-full bg-slate-900 text-white font-black py-4 rounded-lg uppercase tracking-widest text-xs mt-2 shadow-lg active:scale-[0.98]">{t.save}</button>
+            </form>
+          )}
+
+          {authState === 'setup_police' && (
+            <form onSubmit={handleSetupSubmit} className="space-y-4">
+              <h3 className="text-lg font-black text-slate-800 uppercase text-center mb-2">{t.setupPolice}</h3>
+              <div className="space-y-1">
+                <label className="text-[10px] font-black text-slate-500 uppercase ml-1">{t.zone}</label>
+                <select className="w-full bg-slate-50 border-2 border-slate-200 rounded-lg px-4 py-4 text-sm font-semibold outline-none focus:border-amber-500" value={policeProfile.zone} onChange={e => setPoliceProfile({...policeProfile, zone: e.target.value})} required>
+                  <option value="">Select Your Assigned Zone/City</option>
+                  {ZONES_AM.map(z => <option key={z} value={z}>{z}</option>)}
+                </select>
+              </div>
+              <p className="text-[10px] text-slate-400 italic text-center">እባክዎን ያሉበትን ዞን በትክክል ይምረጡ። ሪፖርቶች የሚገቡት በመረጡት አድራሻ መሰረት ነው።</p>
+              <button type="submit" className="w-full bg-slate-900 text-white font-black py-4 rounded-lg uppercase tracking-widest text-xs mt-2 shadow-lg active:scale-[0.98]">{t.save}</button>
             </form>
           )}
 
@@ -299,8 +324,10 @@ export default function App() {
              <button onClick={() => setLang(lang === 'am' ? 'en' : 'am')} className="p-2 bg-slate-50 border rounded-lg active:scale-95 transition-all"><Globe size={16} className="text-amber-600" /></button>
              <div className="flex items-center gap-2 px-3 py-1 bg-slate-50 border rounded-lg">
                 <div className="text-right hidden sm:block">
-                   <p className="text-[10px] font-black text-slate-900 uppercase truncate max-w-[80px] text-left">{currentUser?.username}</p>
-                   <p className="text-[8px] text-amber-600 font-bold uppercase text-left">{currentUser?.role}</p>
+                   <p className="text-[10px] font-black text-slate-900 uppercase truncate max-w-[120px] text-left">
+                     {currentUser?.role === UserRole.RECEPTION ? hotelProfile.name : (currentUser?.role === UserRole.LOCAL_POLICE ? policeProfile.zone : "REGION HQ")}
+                   </p>
+                   <p className="text-[8px] text-amber-600 font-bold uppercase text-left">{currentUser?.role.replace('_', ' ')}</p>
                 </div>
                 <div className="w-8 h-8 bg-slate-900 rounded flex items-center justify-center text-white font-black text-xs">{currentUser?.username[0].toUpperCase()}</div>
              </div>
@@ -338,7 +365,9 @@ export default function App() {
                 <div className="bg-white rounded-2xl shadow-lg border border-slate-100 overflow-hidden">
                   <div className="p-6 border-b bg-slate-50/30">
                     <h3 className="text-lg font-black text-slate-900 uppercase text-left">{t.fullTableRecord}</h3>
-                    <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest mt-0.5 text-left">Official Surveillance Feed</p>
+                    <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest mt-0.5 text-left">
+                      {currentUser?.role === UserRole.SUPER_POLICE ? "Monitoring all Regional Activity" : `Active Feed for ${currentUser?.role === UserRole.RECEPTION ? hotelProfile.name : policeProfile.zone}`}
+                    </p>
                   </div>
                   <div className="overflow-x-auto">
                     <table className="w-full text-left whitespace-nowrap">
@@ -400,12 +429,14 @@ export default function App() {
                 <h3 className="text-lg font-black mb-6 uppercase text-center">{t.settings}</h3>
                 <div className="space-y-4">
                   <div className="p-5 bg-slate-50 rounded-xl border border-slate-200">
-                    <p className="text-[9px] font-black text-slate-400 uppercase mb-1 text-left">Active User</p>
-                    <p className="font-black text-slate-900 text-left">{currentUser?.username}</p>
-                    <p className="text-[10px] text-slate-500 mt-0.5 text-left">{currentUser?.role}</p>
+                    <p className="text-[9px] font-black text-slate-400 uppercase mb-1 text-left">Profile Type</p>
+                    <p className="font-black text-slate-900 text-left">
+                      {currentUser?.role === UserRole.RECEPTION ? hotelProfile.name : (currentUser?.role === UserRole.LOCAL_POLICE ? policeProfile.zone : "REGIONAL HQ")}
+                    </p>
+                    <p className="text-[10px] text-slate-500 mt-0.5 text-left uppercase tracking-widest">{currentUser?.role.replace('_', ' ')}</p>
                   </div>
-                  <button onClick={() => alert("Profile Synced!")} className="w-full py-3.5 bg-slate-900 hover:bg-slate-800 text-white font-black rounded-lg shadow-md transition-all uppercase text-[10px] tracking-widest flex items-center justify-center gap-2 active:scale-[0.98]">
-                    <Save size={14}/> Sync Data
+                  <button onClick={() => alert("Data Synced!")} className="w-full py-3.5 bg-slate-900 hover:bg-slate-800 text-white font-black rounded-lg shadow-md transition-all uppercase text-[10px] tracking-widest flex items-center justify-center gap-2 active:scale-[0.98]">
+                    <Save size={14}/> Force Data Refresh
                   </button>
                 </div>
               </div>
@@ -443,7 +474,7 @@ function DashboardView({ t, guests, notifications, wanted, setView }: any) {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="bg-white p-6 rounded-2xl shadow-lg border border-slate-100 h-[300px] flex flex-col">
           <h4 className="font-black text-slate-900 uppercase mb-6 text-[10px] flex items-center gap-2 text-left">
-            <TrendingUp size={14} className="text-indigo-600"/> Surveillance Stats
+            <TrendingUp size={14} className="text-indigo-600"/> Surveillance Metrics
           </h4>
           <div className="flex-1">
             <ResponsiveContainer width="100%" height="100%">
@@ -459,12 +490,12 @@ function DashboardView({ t, guests, notifications, wanted, setView }: any) {
         </div>
         <div className="bg-white p-6 rounded-2xl shadow-lg border border-slate-100 flex flex-col h-[300px]">
           <h4 className="font-black text-slate-900 uppercase mb-6 text-[10px] flex items-center gap-2 text-left">
-            <Activity size={14} className="text-emerald-500"/> Activity Feed
+            <Activity size={14} className="text-emerald-500"/> Real-time Feed
           </h4>
           <div className="flex-1 overflow-y-auto custom-scrollbar">
             <table className="w-full text-left text-[10px] font-bold uppercase">
               <thead className="bg-slate-50 text-slate-400 sticky top-0">
-                <tr><th className="p-2">Name</th><th className="p-2">Status</th></tr>
+                <tr><th className="p-2">Entity</th><th className="p-2">Status</th></tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {guests.slice(0, 8).map(g => (
@@ -501,10 +532,10 @@ function GuestEntryForm({ onSubmit, newGuest, setNewGuest, t }: any) {
       <h3 className="text-xl font-black mb-8 flex items-center gap-3 uppercase text-left"><UserPlus size={24} className="text-indigo-600" /> {t.registerGuest}</h3>
       <form onSubmit={onSubmit} className="space-y-4">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <StandardInput label={t.fullName} value={newGuest.fullName} onChange={(v: string) => setNewGuest({...newGuest, fullName: v})} required icon={<Users size={16}/>} placeholder="Full Name" />
-          <StandardInput label={t.nationality} value={newGuest.nationality} onChange={(v: string) => setNewGuest({...newGuest, nationality: v})} required icon={<Globe size={16}/>} placeholder="Nationality" />
+          <StandardInput label={t.fullName} value={newGuest.fullName} onChange={(v: string) => setNewGuest({...newGuest, fullName: v})} required icon={<Users size={16}/>} placeholder="Full Legal Name" />
+          <StandardInput label={t.nationality} value={newGuest.nationality} onChange={(v: string) => setNewGuest({...newGuest, nationality: v})} required icon={<Globe size={16}/>} placeholder="Country" />
         </div>
-        <StandardInput label={t.roomNumber} value={newGuest.roomNumber} onChange={(v: string) => setNewGuest({...newGuest, roomNumber: v})} required icon={<Plus size={16}/>} placeholder="Bed ID #" />
+        <StandardInput label={t.roomNumber} value={newGuest.roomNumber} onChange={(v: string) => setNewGuest({...newGuest, roomNumber: v})} required icon={<Plus size={16}/>} placeholder="Bed / Room ID" />
         
         <div className="space-y-2">
           <label className="text-[10px] font-black text-slate-500 uppercase ml-1 text-left">{t.idPhoto}</label>
@@ -564,7 +595,7 @@ function NotificationsFeed({ notifications, t, setView }: any) {
             <h4 className="text-base font-black uppercase text-slate-900 mb-1 text-left">{n.title}</h4>
             <p className="text-xs font-bold text-slate-600 opacity-80 text-left">{n.message}</p>
             {n.guestId && (
-              <button onClick={() => setView('guestList')} className="mt-3 px-5 py-2 bg-red-600 active:scale-95 text-white text-[9px] font-black uppercase rounded shadow transition-all">Review Records</button>
+              <button onClick={() => setView('guestList')} className="mt-3 px-5 py-2 bg-red-600 active:scale-95 text-white text-[9px] font-black uppercase rounded shadow transition-all">Review Security Logs</button>
             )}
           </div>
         </div>
@@ -572,7 +603,7 @@ function NotificationsFeed({ notifications, t, setView }: any) {
       {notifications.length === 0 && (
         <div className="text-center py-32 opacity-20">
           <ShieldCheck size={80} className="mx-auto mb-4 text-slate-300" />
-          <h3 className="text-base font-black uppercase tracking-widest text-slate-400 text-center">Security Online</h3>
+          <h3 className="text-base font-black uppercase tracking-widest text-slate-400 text-center">Secure Environment</h3>
         </div>
       )}
     </div>
