@@ -15,7 +15,16 @@ const INITIAL_WANTED: WantedPerson[] = [
   { id: 'w1', fullName: 'Abebe Kebede', photo: 'https://picsum.photos/seed/abebe/200/200', description: 'Medium build', crime: 'Theft', postedDate: '2023-10-15' },
 ];
 
-const ZONES = ["Assosa Zone", "Kamashi Zone", "Metekel Zone", "Mao Komo Special Woreda", "Assosa City Administration"];
+const ZONES = [
+  "Assosa Zone", 
+  "Kamashi Zone", 
+  "Metekel Zone", 
+  "Mao Komo Special Woreda", 
+  "Assosa City Administration",
+  "Gilgel Beles City Administration",
+  "Kamashi City Administration",
+  "Bambasi City Administration"
+];
 const LOGO_PATH = 'https://img.icons8.com/color/512/police-badge.png';
 const GOLDEN_GRADIENT = "text-transparent bg-clip-text bg-gradient-to-r from-amber-600 via-yellow-400 to-amber-700 font-black drop-shadow-sm";
 
@@ -101,11 +110,8 @@ export default function App() {
   };
 
   const [newGuest, setNewGuest] = useState({ fullName: '', nationality: '', roomNumber: '', idPhoto: '' });
-
-  // Added missing states for wanted persons and file uploads
   const [newWanted, setNewWanted] = useState({ fullName: '', photo: '', description: '', crime: '' });
 
-  // Handle file uploads by converting to base64 encoding for storage
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>, type: 'guest' | 'wanted' | 'hotel') => {
     const file = e.target.files?.[0];
     if (file) {
@@ -120,7 +126,6 @@ export default function App() {
     }
   };
 
-  // Handler to add a new wanted person to the central database
   const addWanted = (e: React.FormEvent) => {
     e.preventDefault();
     const person: WantedPerson = {
@@ -133,7 +138,6 @@ export default function App() {
     setView('dashboard');
   };
 
-  // Filter guests based on police user's zone
   const visibleGuests = useMemo(() => {
     let list = guests;
     if (user?.role === UserRole.LOCAL_POLICE && user.zone) {
@@ -232,8 +236,6 @@ export default function App() {
     </div>
   );
 }
-
-// --- Internal Components with Optimized Sizing ---
 
 function NavItem({ icon, label, active, onClick, count }: any) {
   return (
