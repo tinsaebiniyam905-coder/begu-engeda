@@ -10,6 +10,12 @@ import {
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend
 } from 'recharts';
+import * as XLSX from 'xlsx';
+import jsPDF from 'jspdf';
+import 'jspdf-autotable';
+import { Document, Packer, Paragraph, Table, TableRow, TableCell, WidthType, TextRun } from 'docx';
+import pptxgen from 'pptxgenjs';
+import { saveAs } from 'file-saver';
 
 const INITIAL_WANTED: WantedPerson[] = [
   { id: 'w1', fullName: 'Abebe Kebede', photo: 'https://picsum.photos/seed/abebe/200/200', description: 'Medium build', crime: 'Theft', postedDate: '2023-10-15' },
@@ -189,6 +195,7 @@ export default function App() {
               <NavItem icon={<Plus size={18}/>} label={t.policeNotice} active={view === 'addWanted'} onClick={() => setView('addWanted')} />
               <NavItem icon={<Users size={18}/>} label={t.guestList} active={view === 'guestList'} onClick={() => setView('guestList')} />
               <NavItem icon={<Building2 size={18}/>} label={t.hotelDirectory} active={view === 'hotelDirectory'} onClick={() => setView('hotelDirectory')} />
+              <NavItem icon={<FileBarChart size={18}/>} label={t.reports} active={view === 'reports'} onClick={() => setView('reports')} />
             </>
           )}
           <NavItem icon={<Bell size={18}/>} label={t.notifications} active={view === 'notifications'} count={notifications.length} onClick={() => setView('notifications')} />
@@ -227,7 +234,7 @@ export default function App() {
           {view === 'addWanted' && <WantedForm wanted={wanted} setWanted={setWanted} t={t} handleFileUpload={handleFileUpload} addWanted={addWanted} newWanted={newWanted} setNewWanted={setNewWanted} />}
           {view === 'hotelDirectory' && <HotelDir hotels={allHotels} t={t} />}
           {view === 'utility' && <div className="bg-white p-10 rounded-xl shadow-sm border space-y-6"><h3 className={`text-2xl text-center ${GOLDEN_GRADIENT}`}>{t.appUtility}</h3><p className="text-gray-600 font-bold leading-relaxed">{t.utilityText}</p><p className="text-amber-700 font-black uppercase text-center mt-10">{t.developerCredit}</p></div>}
-          {view === 'reports' && <ReportSection t={t} guests={visibleGuests} user={user} />}
+          {view === 'reports' && <ReportSection t={t} guests={visibleGuests} user={user} hotelProfile={hotelProfile} />}
           {view === 'notifications' && <NotifView notifications={notifications} t={t} setView={setView} />}
           {view === 'settings' && <SetupForm hotelProfile={hotelProfile} setHotelProfile={setHotelProfile} onSubmit={handleSetupSubmit} t={t} handleFileUpload={handleFileUpload} isSettings />}
         </main>
@@ -382,13 +389,183 @@ function HotelDir({ hotels, t }: any) {
   );
 }
 
-function ReportSection({ t, guests, user }: any) {
+function ReportSection({ t, guests, user, hotelProfile }: any) {
+  const [period, setPeriod] = useState('1'); // Days
+
+  const periods = [
+    { id: '1', label: t.dailyReport },
+    { id: '7', label: t.weeklyReport },
+    { id: '15', label: t.biweeklyReport },
+    { id: '30', label: t.monthlyReport },
+    { id: '90', label: t.quarterlyReport },
+    { id: '180', label: t.semiAnnualReport },
+    { id: '365', label: t.yearlyReport },
+  ];
+
+  const getFilteredGuests = () => {
+    const now = new Date();
+    const cutoff = new Date();
+    cutoff.setDate(now.getDate() - parseInt(period));
+    
+    return guests.filter((g: any) => {
+      const checkIn = new Date(g.checkInDate);
+      return checkIn >= cutoff;
+    });
+  };
+
+  const generateExcel = () => {
+    const data = getFilteredGuests().map((g: any) => ({
+      'Full Name': g.fullName,
+      'Nationality': g.nationality,
+      'Room Number': g.roomNumber,
+      'Hotel': g.hotelName,
+      'Zone': g.hotelZone,
+      'Check-in Date': g.checkInDate,
+      'Status': g.isWanted ? 'WANTED' : 'CLEAR'
+    }));
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Guests");
+    XLSX.writeFile(wb, `Begu_Engeda_Report_${period}_days.xlsx`);
+  };
+
+  const generatePDF = () => {
+    const doc = new jsPDF();
+    const filtered = getFilteredGuests();
+    
+    doc.setFontSize(18);
+    doc.text("Begu Engeda - Official Guest Report", 14, 22);
+    doc.setFontSize(11);
+    doc.setTextColor(100);
+    doc.text(`Report Period: ${period} Days`, 14, 30);
+    doc.text(`Generated on: ${new Date().toLocaleString()}`, 14, 36);
+    doc.text(`Hotel: ${hotelProfile?.name || 'All'}`, 14, 42);
+
+    (doc as any).autoTable({
+      startY: 50,
+      head: [['Full Name', 'Nationality', 'Room', 'Check-in', 'Status']],
+      body: filtered.map((g: any) => [
+        g.fullName,
+        g.nationality,
+        g.roomNumber,
+        g.checkInDate,
+        g.isWanted ? 'WANTED' : 'CLEAR'
+      ]),
+      theme: 'grid',
+      headStyles: { fillStyle: '#1e293b' }
+    });
+
+    doc.save(`Begu_Engeda_Report_${period}_days.pdf`);
+  };
+
+  const generateWord = async () => {
+    const filtered = getFilteredGuests();
+    const doc = new Document({
+      sections: [{
+        properties: {},
+        children: [
+          new Paragraph({
+            children: [new TextRun({ text: "Begu Engeda - Official Guest Report", bold: true, size: 32 })],
+          }),
+          new Paragraph({ text: `Report Period: ${period} Days` }),
+          new Paragraph({ text: `Generated on: ${new Date().toLocaleString()}` }),
+          new Paragraph({ text: "" }),
+          new Table({
+            width: { size: 100, type: WidthType.PERCENTAGE },
+            rows: [
+              new TableRow({
+                children: [
+                  new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: "Full Name", bold: true })] })] }),
+                  new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: "Nationality", bold: true })] })] }),
+                  new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: "Room", bold: true })] })] }),
+                  new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: "Check-in", bold: true })] })] }),
+                  new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: "Status", bold: true })] })] }),
+                ],
+              }),
+              ...filtered.map((g: any) => new TableRow({
+                children: [
+                  new TableCell({ children: [new Paragraph(g.fullName)] }),
+                  new TableCell({ children: [new Paragraph(g.nationality)] }),
+                  new TableCell({ children: [new Paragraph(g.roomNumber)] }),
+                  new TableCell({ children: [new Paragraph(g.checkInDate)] }),
+                  new TableCell({ children: [new Paragraph(g.isWanted ? 'WANTED' : 'CLEAR')] }),
+                ],
+              }))
+            ],
+          }),
+        ],
+      }],
+    });
+
+    const blob = await Packer.toBlob(doc);
+    saveAs(blob, `Begu_Engeda_Report_${period}_days.docx`);
+  };
+
+  const generatePPT = () => {
+    const filtered = getFilteredGuests();
+    const pres = new pptxgen();
+    
+    const slide = pres.addSlide();
+    slide.addText("Begu Engeda - Official Guest Report", { x: 0.5, y: 0.5, fontSize: 24, bold: true, color: "363636" });
+    slide.addText(`Report Period: ${period} Days`, { x: 0.5, y: 1.2, fontSize: 14, color: "666666" });
+    slide.addText(`Generated on: ${new Date().toLocaleString()}`, { x: 0.5, y: 1.5, fontSize: 12, color: "999999" });
+
+    const rows = [
+      ['Full Name', 'Nationality', 'Room', 'Check-in', 'Status'],
+      ...filtered.slice(0, 10).map((g: any) => [g.fullName, g.nationality, g.roomNumber, g.checkInDate, g.isWanted ? 'WANTED' : 'CLEAR'])
+    ];
+
+    slide.addTable(rows, { x: 0.5, y: 2.0, w: 9.0, border: { type: 'solid', color: 'E1E1E1' }, fontSize: 10 });
+
+    pres.writeFile({ fileName: `Begu_Engeda_Report_${period}_days.pptx` });
+  };
+
+  const handleDownload = (format: string) => {
+    switch(format) {
+      case 'EXCEL': generateExcel(); break;
+      case 'PDF': generatePDF(); break;
+      case 'WORD': generateWord(); break;
+      case 'PPT': generatePPT(); break;
+    }
+  };
+
   return (
     <div className="bg-white p-10 rounded-xl shadow border text-center space-y-10">
-      <div className="flex flex-col items-center"><FileBarChart className="text-amber-500 mb-4" size={48} /><h3 className={`text-2xl uppercase ${GOLDEN_GRADIENT}`}>Official Oversight Ledger</h3><p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{t.developedBy}</p></div>
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        {["EXCEL", "WORD", "PPT", "PDF"].map(f => <button key={f} className="p-6 bg-slate-50 border rounded-xl flex flex-col items-center gap-2 hover:bg-amber-50 group transition-all"><Download className="text-gray-400 group-hover:text-amber-600" size={24}/><span className="text-[10px] font-black uppercase text-gray-600">{f}</span></button>)}
+      <div className="flex flex-col items-center">
+        <FileBarChart className="text-amber-500 mb-4" size={48} />
+        <h3 className={`text-2xl uppercase ${GOLDEN_GRADIENT}`}>Official Oversight Ledger</h3>
+        <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{t.developedBy}</p>
       </div>
+
+      <div className="max-w-xs mx-auto space-y-2">
+        <label className="text-[10px] font-black text-gray-400 uppercase">{t.selectPeriod}</label>
+        <select 
+          className="w-full bg-gray-50 border rounded-lg px-4 py-3 font-bold text-sm outline-none focus:ring-2 focus:ring-amber-500"
+          value={period}
+          onChange={(e) => setPeriod(e.target.value)}
+        >
+          {periods.map(p => <option key={p.id} value={p.id}>{p.label}</option>)}
+        </select>
+      </div>
+
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {[
+          { id: 'EXCEL', icon: <FileText size={24}/>, label: 'EXCEL' },
+          { id: 'WORD', icon: <FileText size={24}/>, label: 'WORD' },
+          { id: 'PPT', icon: <FileBarChart size={24}/>, label: 'PPT' },
+          { id: 'PDF', icon: <Download size={24}/>, label: 'PDF' }
+        ].map(f => (
+          <button 
+            key={f.id} 
+            onClick={() => handleDownload(f.id)}
+            className="p-6 bg-slate-50 border rounded-xl flex flex-col items-center gap-2 hover:bg-amber-50 group transition-all"
+          >
+            <div className="text-gray-400 group-hover:text-amber-600">{f.icon}</div>
+            <span className="text-[10px] font-black uppercase text-gray-600">{f.label}</span>
+          </button>
+        ))}
+      </div>
+
       <div className="pt-10 border-t flex justify-between items-center text-[9px] font-bold text-gray-400 uppercase text-left no-print">
         <div><p className="mb-6">Auditor Certification</p><div className="h-px bg-gray-100 w-32 mb-1"></div><p className="opacity-40">{t.supervisorName}</p></div>
         <div className="text-right"><p className="mb-6">Regional Seal</p><div className="h-px bg-gray-100 w-32 ml-auto mb-1"></div><p className="opacity-40">{t.signature}</p></div>
