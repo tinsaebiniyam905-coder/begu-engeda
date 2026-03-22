@@ -4,6 +4,7 @@ import { Language } from './types';
 export const translations = {
   am: {
     appName: "ቤጉ እንግዳ",
+    policeCommission: "ቤንሻንጉል ጉምዝ ክልል ፖሊስ ኮሚሽን",
     developedBy: "ቤንሻንጉል ጉምዝ ክልል ፖሊስ ኮሚሽን ቴክኖሎጂ እና መረጃ ማዕከል",
     motto: "በጀግንነት መጠበቅ በሰብዓዊነት ማገልገል",
     developerCredit: "በቤንሻንጉል ጉምዝ ክልል ፖሊስ ኮሚሽን ቴክኖሎጂ እና መረጃ ማዕከል የተዘጋጀ",
@@ -83,6 +84,7 @@ export const translations = {
   },
   en: {
     appName: "Begu Engeda",
+    policeCommission: "Benishangul Gumuz Region Police Commission",
     developedBy: "Benishangul Gumuz Region Police Commission Technology and Information Center",
     motto: "Protect with Heroism, Serve with Humanity",
     developerCredit: "Prepared by Benishangul Gumuz Region Police Commission Technology and Information Center",
