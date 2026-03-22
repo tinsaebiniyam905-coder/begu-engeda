@@ -302,8 +302,13 @@ function AppContent() {
       const result = await signInWithPopup(auth, provider);
       // Auth listener will handle the rest
       setView('dashboard');
-    } catch (error) {
+    } catch (error: any) {
       console.error("Login failed:", error);
+      if (error.code === 'auth/popup-blocked') {
+        alert('The login popup was blocked by your browser. Please allow popups for this site and try again. / የመግቢያ መስኮቱ በብሮውዘርዎ ተዘግቷል። እባክዎ ለዚህ ሳይት ፖፕ-አፕ ይፍቀዱ እና እንደገና ይሞክሩ።');
+      } else {
+        alert('Login failed / መግባት አልተቻለም: ' + error.message);
+      }
     }
   };
 
