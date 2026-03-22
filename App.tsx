@@ -48,6 +48,7 @@ export default function App() {
   
   const [allHotels, setAllHotels] = useState<HotelProfile[]>(() => JSON.parse(localStorage.getItem('allHotels') || '[]'));
   const [hotelProfile, setHotelProfile] = useState<HotelProfile>(() => JSON.parse(localStorage.getItem('currentHotel') || '{"name":"","address":"","zone":"","receptionistName":"","phoneNumber":""}'));
+  const [hasAgreed, setHasAgreed] = useState(false);
 
   const t = translations[lang];
 
@@ -65,7 +66,7 @@ export default function App() {
     } else if (loginData.username === 'police' && loginData.password === 'police1234') {
       // Police Commission (Super Police) - Full Monitoring
       setUser({ role: UserRole.SUPER_POLICE, username: 'Police Commission' });
-      setView('dashboard');
+      setView('agreement');
     } else if (loginData.username === 'police' && loginData.password === '1234') {
       // Local Police
       setUser({ role: UserRole.LOCAL_POLICE, username: 'police' });
@@ -73,7 +74,12 @@ export default function App() {
     } else alert('Invalid credentials / የተሳሳተ መረጃ');
   };
 
-  const handleLogout = () => { setUser(null); setView('dashboard'); setIsSidebarOpen(false); };
+  const handleLogout = () => { 
+    setUser(null); 
+    setView('dashboard'); 
+    setIsSidebarOpen(false); 
+    setHasAgreed(false);
+  };
 
   const handleSetupSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -82,7 +88,7 @@ export default function App() {
       const exists = allHotels.find(h => h.id === hotelProfile.id);
       if (!exists) setAllHotels([...allHotels, hotelProfile]);
       else setAllHotels(allHotels.map(h => h.id === hotelProfile.id ? hotelProfile : h));
-      setView('dashboard');
+      setView('agreement');
     } else alert("Fill all details / ሁሉንም ይሙሉ");
   };
 
@@ -148,16 +154,22 @@ export default function App() {
   };
 
   const visibleGuests = useMemo(() => {
-    return guests.filter(g => g.fullName.toLowerCase().includes(searchTerm.toLowerCase()));
-  }, [guests, searchTerm]);
+    let filtered = guests;
+    if (user?.role === UserRole.LOCAL_POLICE && user.zone) {
+      filtered = guests.filter(g => g.hotelZone === user.zone);
+    } else if (user?.role === UserRole.RECEPTION && hotelProfile.zone) {
+      filtered = guests.filter(g => g.hotelId === hotelProfile.id);
+    }
+    return filtered.filter(g => g.fullName.toLowerCase().includes(searchTerm.toLowerCase()));
+  }, [guests, searchTerm, user, hotelProfile]);
 
   if (!user) {
     return (
       <div className="min-h-screen bg-slate-900 flex items-center justify-center p-6">
-        <div className="bg-white rounded-xl shadow-2xl p-8 w-full max-w-sm">
+        <div className="bg-white rounded-xl shadow-2xl p-8 w-full max-sm:w-full max-w-sm">
           <img src={LOGO_PATH} className="w-24 h-24 mx-auto mb-6" />
-          <h1 className={`text-3xl text-center mb-1 ${GOLDEN_GRADIENT}`}>{t.appName}</h1>
-          <p className="text-[10px] font-bold text-gray-500 text-center uppercase mb-8">{t.developedBy}</p>
+          <h1 className={`text-xl text-center mb-1 ${GOLDEN_GRADIENT}`}>{t.appName}</h1>
+          <p className="text-[10px] font-bold text-gray-500 text-center uppercase mb-8 leading-tight">{t.developedBy}</p>
           <form onSubmit={handleLogin} className="space-y-4">
             <input type="text" placeholder={t.username} className="w-full bg-gray-50 border border-gray-200 rounded-lg px-4 py-3 outline-none focus:ring-2 focus:ring-amber-500 font-bold" value={loginData.username} onChange={e => setLoginData({...loginData, username: e.target.value})} required />
             <input type="password" placeholder={t.password} className="w-full bg-gray-50 border border-gray-200 rounded-lg px-4 py-3 outline-none focus:ring-2 focus:ring-amber-500 font-bold" value={loginData.password} onChange={e => setLoginData({...loginData, password: e.target.value})} required />
@@ -169,6 +181,38 @@ export default function App() {
           </div>
           <p className="text-[9px] text-gray-400 text-center mt-10 font-bold italic opacity-60">"{t.motto}"</p>
           <p className="text-[8px] text-amber-600 text-center mt-2 font-black uppercase">{t.developerCredit}</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (view === 'agreement') {
+    return (
+      <div className="min-h-screen bg-slate-100 flex items-center justify-center p-6">
+        <div className="bg-white rounded-2xl shadow-xl p-10 w-full max-w-2xl border border-gray-200">
+          <div className="flex flex-col items-center mb-8">
+            <ShieldCheck className="text-amber-500 mb-4" size={64} />
+            <h2 className="text-2xl font-black text-slate-800 uppercase tracking-widest">{t.termsTitle}</h2>
+          </div>
+          <div className="bg-slate-50 p-8 rounded-xl border border-slate-200 mb-8">
+            <p className="text-slate-600 font-bold leading-relaxed text-lg italic">
+              "{t.termsBody}"
+            </p>
+          </div>
+          <div className="flex flex-col gap-4">
+            <button 
+              onClick={() => { setHasAgreed(true); setView('dashboard'); }}
+              className="w-full bg-slate-900 hover:bg-slate-800 text-white font-black py-4 rounded-xl transition-all shadow-xl uppercase tracking-widest text-sm"
+            >
+              {t.agree}
+            </button>
+            <button 
+              onClick={handleLogout}
+              className="w-full bg-white border border-gray-200 text-gray-500 font-bold py-3 rounded-xl hover:bg-gray-50 transition-all uppercase text-xs"
+            >
+              {t.cancel}
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -216,7 +260,7 @@ export default function App() {
           <div className="flex items-center gap-4">
              <div className="text-right leading-none hidden sm:block">
                 <p className="text-xs font-black text-slate-900 uppercase">{user.username}</p>
-                <p className="text-[9px] text-amber-600 font-bold uppercase mt-1">{user.zone || "Headquarters"}</p>
+                <p className="text-[9px] text-amber-600 font-bold uppercase mt-1">{user.zone || hotelProfile.zone || "Headquarters"}</p>
              </div>
              <div className="w-8 h-8 bg-amber-100 rounded text-amber-700 flex items-center justify-center font-bold">{user.username[0]}</div>
           </div>
@@ -226,16 +270,16 @@ export default function App() {
           {zoomImg && <div className="fixed inset-0 bg-black/80 z-[100] flex items-center justify-center p-4" onClick={() => setZoomImg(null)}><img src={zoomImg} className="max-w-full max-h-full rounded shadow-2xl"/></div>}
           
           {view === 'setupHotel' && <SetupForm hotelProfile={hotelProfile} setHotelProfile={setHotelProfile} onSubmit={handleSetupSubmit} t={t} handleFileUpload={handleFileUpload} />}
-          {view === 'setupPolice' && <div className="max-w-md mx-auto bg-white p-8 rounded-xl shadow-lg border border-gray-100"><h3 className="text-xl font-bold mb-6 uppercase text-slate-800">Assigned Jurisdiction</h3><div className="space-y-4">{ZONES.map(z => <button key={z} onClick={() => { setUser({...user, zone: z}); setView('dashboard'); }} className="w-full text-left p-4 bg-gray-50 border rounded-lg font-bold text-gray-600 hover:bg-amber-50 hover:border-amber-500 transition-all">{z}</button>)}</div></div>}
+          {view === 'setupPolice' && <div className="max-w-md mx-auto bg-white p-8 rounded-xl shadow-lg border border-gray-100"><h3 className="text-xl font-bold mb-6 uppercase text-slate-800">Assigned Jurisdiction</h3><div className="space-y-4">{ZONES.map(z => <button key={z} onClick={() => { setUser({...user, zone: z}); setView('agreement'); }} className="w-full text-left p-4 bg-gray-50 border rounded-lg font-bold text-gray-600 hover:bg-amber-50 hover:border-amber-500 transition-all">{z}</button>)}</div></div>}
           
           {view === 'dashboard' && <Dashboard user={user} t={t} guests={visibleGuests} notifications={notifications} wanted={wanted} setView={setView} hotelProfile={hotelProfile} />}
           {view === 'guestList' && <ListView items={visibleGuests} t={t} setZoomImg={setZoomImg} />}
           {view === 'registerGuest' && <GuestForm newGuest={newGuest} setNewGuest={setNewGuest} onSubmit={saveGuest} t={t} handleFileUpload={handleFileUpload} />}
           {view === 'addWanted' && <WantedForm wanted={wanted} setWanted={setWanted} t={t} handleFileUpload={handleFileUpload} addWanted={addWanted} newWanted={newWanted} setNewWanted={setNewWanted} />}
-          {view === 'hotelDirectory' && <HotelDir hotels={allHotels} t={t} />}
+          {view === 'hotelDirectory' && <HotelDir hotels={allHotels} t={t} user={user} />}
           {view === 'utility' && <div className="bg-white p-10 rounded-xl shadow-sm border space-y-6"><h3 className={`text-2xl text-center ${GOLDEN_GRADIENT}`}>{t.appUtility}</h3><p className="text-gray-600 font-bold leading-relaxed">{t.utilityText}</p><p className="text-amber-700 font-black uppercase text-center mt-10">{t.developerCredit}</p></div>}
           {view === 'reports' && <ReportSection t={t} guests={visibleGuests} user={user} hotelProfile={hotelProfile} />}
-          {view === 'notifications' && <NotifView notifications={notifications} t={t} setView={setView} />}
+          {view === 'notifications' && <NotifView notifications={notifications} t={t} setView={setView} user={user} />}
           {view === 'settings' && <SetupForm hotelProfile={hotelProfile} setHotelProfile={setHotelProfile} onSubmit={handleSetupSubmit} t={t} handleFileUpload={handleFileUpload} isSettings />}
         </main>
       </div>
@@ -381,10 +425,31 @@ function WantedForm({ addWanted, newWanted, setNewWanted, t, handleFileUpload }:
   );
 }
 
-function HotelDir({ hotels, t }: any) {
+function HotelDir({ hotels, t, user }: any) {
+  const filteredHotels = useMemo(() => {
+    if (user?.role === UserRole.LOCAL_POLICE && user.zone) {
+      return hotels.filter((h: any) => h.zone === user.zone);
+    }
+    return hotels;
+  }, [hotels, user]);
+
   return (
     <div className="bg-white rounded-xl shadow border overflow-hidden">
-      <table className="w-full text-left text-[11px] font-bold uppercase"><thead className="bg-gray-50 text-gray-400"><tr><th className="p-4">Hotel Name</th><th className="p-4">Jurisdiction</th><th className="p-4">Personnel</th></tr></thead><tbody className="divide-y">{hotels.map((h: any) => <tr key={h.id} className="hover:bg-gray-50"><td className="p-4">{h.name}</td><td className="p-4 text-gray-400">{h.zone}</td><td className="p-4">{h.receptionistName}<br/><span className="text-[9px] text-indigo-500 font-black">{h.phoneNumber}</span></td></tr>)}</tbody></table>
+      <table className="w-full text-left text-[11px] font-bold uppercase">
+        <thead className="bg-gray-50 text-gray-400">
+          <tr><th className="p-4">Hotel Name</th><th className="p-4">Jurisdiction</th><th className="p-4">Personnel</th></tr>
+        </thead>
+        <tbody className="divide-y">
+          {filteredHotels.map((h: any) => (
+            <tr key={h.id} className="hover:bg-gray-50">
+              <td className="p-4">{h.name}</td>
+              <td className="p-4 text-gray-400">{h.zone}</td>
+              <td className="p-4">{h.receptionistName}<br/><span className="text-[9px] text-indigo-500 font-black">{h.phoneNumber}</span></td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {filteredHotels.length === 0 && <div className="p-10 text-center text-gray-300 font-black uppercase tracking-widest">No Hotels Found</div>}
     </div>
   );
 }
@@ -687,10 +752,17 @@ function ReportSection({ t, guests, user, hotelProfile }: any) {
   );
 }
 
-function NotifView({ notifications, t, setView }: any) {
+function NotifView({ notifications, t, setView, user }: any) {
+  const filteredNotifs = useMemo(() => {
+    if (user?.role === UserRole.LOCAL_POLICE && user.zone) {
+      return notifications.filter((n: any) => n.targetZone === user.zone);
+    }
+    return notifications;
+  }, [notifications, user]);
+
   return (
     <div className="max-w-2xl mx-auto space-y-4">
-      {notifications.map((n: any) => <div key={n.id} className={`p-6 bg-white border-l-[6px] rounded-xl shadow-sm flex gap-4 ${n.type === 'danger' ? 'border-red-600' : 'border-indigo-600'}`}>
+      {filteredNotifs.map((n: any) => <div key={n.id} className={`p-6 bg-white border-l-[6px] rounded-xl shadow-sm flex gap-4 ${n.type === 'danger' ? 'border-red-600' : 'border-indigo-600'}`}>
         <div className={`p-3 rounded-lg ${n.type === 'danger' ? 'bg-red-50 text-red-600' : 'bg-indigo-50 text-indigo-600'}`}><ShieldAlert size={20}/></div>
         <div className="flex-1">
           <div className="flex justify-between items-start mb-2"><p className="text-[9px] font-bold text-gray-400 uppercase">{n.timestamp}</p></div>
@@ -699,7 +771,7 @@ function NotifView({ notifications, t, setView }: any) {
           {n.guestId && <button onClick={() => setView('guestList')} className="mt-4 px-4 py-1.5 bg-red-600 text-white text-[9px] font-bold uppercase rounded shadow">Intercept Details</button>}
         </div>
       </div>)}
-      {notifications.length === 0 && <div className="text-center py-20 text-gray-300 font-black uppercase tracking-widest text-sm select-none opacity-40">System Secure</div>}
+      {filteredNotifs.length === 0 && <div className="text-center py-20 text-gray-300 font-black uppercase tracking-widest text-sm select-none opacity-40">System Secure</div>}
     </div>
   );
 }
