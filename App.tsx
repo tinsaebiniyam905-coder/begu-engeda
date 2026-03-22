@@ -22,7 +22,8 @@ import {
   getDocs, getDocFromServer, Timestamp 
 } from 'firebase/firestore';
 import { 
-  GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut, User as FirebaseUser 
+  GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut, User as FirebaseUser,
+  signInWithEmailAndPassword, createUserWithEmailAndPassword
 } from 'firebase/auth';
 
 class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean, errorInfo: string | null }> {
@@ -208,7 +209,7 @@ function AppContent() {
             }
           } else {
             let role: UserRole = UserRole.RECEPTION;
-            let username = firebaseUser.displayName || 'User';
+            let username = firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'User';
             
             if (firebaseUser.email === 'tinsaebiniyam905@gmail.com') {
               role = UserRole.SUPER_POLICE;
@@ -308,7 +309,36 @@ function AppContent() {
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    alert('Please use Google Login for secure, multi-device synchronization. / እባክዎ ለደህንነቱ የተጠበቀ እና ለብዙ መሳሪያዎች ማመሳሰል በGoogle ይግቡ።');
+    if (!loginData.username || !loginData.password) {
+      alert('Please enter both username and password / እባክዎ የተጠቃሚ ስም እና የይለፍ ቃል ያስገቡ');
+      return;
+    }
+
+    try {
+      // If it looks like an email, use it directly. Otherwise, append a dummy domain for the auth provider.
+      const email = loginData.username.includes('@') ? loginData.username : `${loginData.username}@begu-engeda.com`;
+      await signInWithEmailAndPassword(auth, email, loginData.password);
+      setView('dashboard');
+    } catch (error: any) {
+      console.error("Login failed:", error);
+      if (error.code === 'auth/user-not-found') {
+        // For this specific app, we might want to allow auto-registration if it's a new user
+        // but let's first try to be helpful.
+        if (window.confirm('User not found. Would you like to create a new account with these credentials? / ተጠቃሚው አልተገኘም። በእነዚህ መረጃዎች አዲስ መለያ መፍጠር ይፈልጋሉ?')) {
+          try {
+            const email = loginData.username.includes('@') ? loginData.username : `${loginData.username}@begu-engeda.com`;
+            await createUserWithEmailAndPassword(auth, email, loginData.password);
+            setView('dashboard');
+          } catch (regError: any) {
+            alert('Registration failed: ' + regError.message);
+          }
+        }
+      } else if (error.code === 'auth/wrong-password') {
+        alert('Incorrect password / የተሳሳተ የይለፍ ቃል');
+      } else {
+        alert('Login failed / መግባት አልተቻለም: ' + error.message);
+      }
+    }
   };
 
   const handleLogout = async () => { 
