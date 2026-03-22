@@ -7,7 +7,7 @@ export const translations = {
     policeCommission: "ቤንሻንጉል ጉምዝ ክልል ፖሊስ ኮሚሽን",
     developedBy: "ቤንሻንጉል ጉምዝ ክልል ፖሊስ ኮሚሽን ቴክኖሎጂ እና መረጃ ማዕከል",
     motto: "በጀግንነት መጠበቅ በሰብዓዊነት ማገልገል",
-    developerCredit: "በቤንሻንጉል ጉምዝ ክልል ፖሊስ ኮሚሽን ቴክኖሎጂ እና መረጃ ማዕከል የተዘጋጀ",
+    developerCredit: "በቤንሻንጉል ጉሙዝ ክልል ፖሊስ ኮሚሽን ቴክኖሎጂ እና መረጃ ማዕከል የተዘጋጀ",
     login: "ይግቡ",
     username: "ተጠቃሚ ስም",
     password: "የይለፍ ቃል",
