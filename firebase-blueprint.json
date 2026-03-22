@@ -1,0 +1,91 @@
+{
+  "entities": {
+    "Guest": {
+      "title": "Guest",
+      "description": "A guest registered at a hotel",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "fullName": { "type": "string" },
+        "nationality": { "type": "string" },
+        "roomNumber": { "type": "string" },
+        "idPhoto": { "type": "string" },
+        "guestPhone": { "type": "string" },
+        "origin": { "type": "string" },
+        "purpose": { "type": "string" },
+        "duration": { "type": "string" },
+        "hotelId": { "type": "string" },
+        "hotelName": { "type": "string" },
+        "hotelAddress": { "type": "string" },
+        "hotelZone": { "type": "string" },
+        "receptionistName": { "type": "string" },
+        "receptionistPhone": { "type": "string" },
+        "checkInDate": { "type": "string" },
+        "isWanted": { "type": "boolean" }
+      },
+      "required": ["id", "fullName", "hotelId"]
+    },
+    "WantedPerson": {
+      "title": "WantedPerson",
+      "description": "A person wanted by the police",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "fullName": { "type": "string" },
+        "photo": { "type": "string" },
+        "description": { "type": "string" },
+        "crime": { "type": "string" },
+        "postedDate": { "type": "string" }
+      },
+      "required": ["id", "fullName"]
+    },
+    "Notification": {
+      "title": "Notification",
+      "description": "A system notification or alert",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "message": { "type": "string" },
+        "type": { "type": "string", "enum": ["info", "danger"] },
+        "timestamp": { "type": "string" },
+        "targetZone": { "type": "string" },
+        "guestId": { "type": "string" }
+      },
+      "required": ["id", "title", "message"]
+    },
+    "HotelProfile": {
+      "title": "HotelProfile",
+      "description": "Profile of a registered hotel",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "address": { "type": "string" },
+        "zone": { "type": "string" },
+        "receptionistName": { "type": "string" },
+        "phoneNumber": { "type": "string" },
+        "logo": { "type": "string" }
+      },
+      "required": ["id", "name", "zone"]
+    }
+  },
+  "firestore": {
+    "/guests/{guestId}": {
+      "schema": "Guest",
+      "description": "Collection of registered guests"
+    },
+    "/wanted/{wantedId}": {
+      "schema": "WantedPerson",
+      "description": "Collection of wanted persons"
+    },
+    "/notifications/{notificationId}": {
+      "schema": "Notification",
+      "description": "Collection of system notifications"
+    },
+    "/hotels/{hotelId}": {
+      "schema": "HotelProfile",
+      "description": "Collection of hotel profiles"
+    }
+  }
+}
