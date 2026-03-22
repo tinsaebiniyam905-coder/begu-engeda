@@ -391,6 +391,8 @@ function HotelDir({ hotels, t }: any) {
 
 function ReportSection({ t, guests, user, hotelProfile }: any) {
   const [period, setPeriod] = useState('1'); // Days
+  const [showPreview, setShowPreview] = useState(false);
+  const [previewFormat, setPreviewFormat] = useState<string | null>(null);
 
   const periods = [
     { id: '1', label: t.dailyReport },
@@ -413,8 +415,8 @@ function ReportSection({ t, guests, user, hotelProfile }: any) {
     });
   };
 
-  const generateExcel = () => {
-    const data = getFilteredGuests().map((g: any) => ({
+  const generateExcel = (data: any[]) => {
+    const excelData = data.map((g: any) => ({
       'Full Name': g.fullName,
       'Nationality': g.nationality,
       'Room Number': g.roomNumber,
@@ -423,15 +425,14 @@ function ReportSection({ t, guests, user, hotelProfile }: any) {
       'Check-in Date': g.checkInDate,
       'Status': g.isWanted ? 'WANTED' : 'CLEAR'
     }));
-    const ws = XLSX.utils.json_to_sheet(data);
+    const ws = XLSX.utils.json_to_sheet(excelData);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Guests");
     XLSX.writeFile(wb, `Begu_Engeda_Report_${period}_days.xlsx`);
   };
 
-  const generatePDF = () => {
+  const generatePDF = (data: any[]) => {
     const doc = new jsPDF();
-    const filtered = getFilteredGuests();
     
     doc.setFontSize(18);
     doc.text("Begu Engeda - Official Guest Report", 14, 22);
@@ -444,7 +445,7 @@ function ReportSection({ t, guests, user, hotelProfile }: any) {
     (doc as any).autoTable({
       startY: 50,
       head: [['Full Name', 'Nationality', 'Room', 'Check-in', 'Status']],
-      body: filtered.map((g: any) => [
+      body: data.map((g: any) => [
         g.fullName,
         g.nationality,
         g.roomNumber,
@@ -458,8 +459,7 @@ function ReportSection({ t, guests, user, hotelProfile }: any) {
     doc.save(`Begu_Engeda_Report_${period}_days.pdf`);
   };
 
-  const generateWord = async () => {
-    const filtered = getFilteredGuests();
+  const generateWord = async (data: any[]) => {
     const doc = new Document({
       sections: [{
         properties: {},
@@ -482,7 +482,7 @@ function ReportSection({ t, guests, user, hotelProfile }: any) {
                   new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: "Status", bold: true })] })] }),
                 ],
               }),
-              ...filtered.map((g: any) => new TableRow({
+              ...data.map((g: any) => new TableRow({
                 children: [
                   new TableCell({ children: [new Paragraph(g.fullName)] }),
                   new TableCell({ children: [new Paragraph(g.nationality)] }),
@@ -501,8 +501,7 @@ function ReportSection({ t, guests, user, hotelProfile }: any) {
     saveAs(blob, `Begu_Engeda_Report_${period}_days.docx`);
   };
 
-  const generatePPT = () => {
-    const filtered = getFilteredGuests();
+  const generatePPT = (data: any[]) => {
     const pres = new pptxgen();
     
     // Title Slide
@@ -514,8 +513,8 @@ function ReportSection({ t, guests, user, hotelProfile }: any) {
 
     // Data Slides (10 guests per slide)
     const guestsPerSlide = 10;
-    for (let i = 0; i < filtered.length; i += guestsPerSlide) {
-      const chunk = filtered.slice(i, i + guestsPerSlide);
+    for (let i = 0; i < data.length; i += guestsPerSlide) {
+      const chunk = data.slice(i, i + guestsPerSlide);
       const dataSlide = pres.addSlide();
       dataSlide.addText(`Guest Data - Page ${Math.floor(i / guestsPerSlide) + 1}`, { x: 0.5, y: 0.3, fontSize: 18, bold: true, color: "1e293b" });
       
@@ -545,16 +544,32 @@ function ReportSection({ t, guests, user, hotelProfile }: any) {
   };
 
   const handleDownload = (format: string) => {
-    switch(format) {
-      case 'EXCEL': generateExcel(); break;
-      case 'PDF': generatePDF(); break;
-      case 'WORD': generateWord(); break;
-      case 'PPT': generatePPT(); break;
-    }
+    setPreviewFormat(format);
+    setShowPreview(true);
   };
 
+  const confirmDownload = () => {
+    const filtered = getFilteredGuests();
+    if (previewFormat === 'ALL') {
+      generateExcel(filtered);
+      generateWord(filtered);
+      generatePPT(filtered);
+      generatePDF(filtered);
+    } else {
+      switch(previewFormat) {
+        case 'EXCEL': generateExcel(filtered); break;
+        case 'PDF': generatePDF(filtered); break;
+        case 'WORD': generateWord(filtered); break;
+        case 'PPT': generatePPT(filtered); break;
+      }
+    }
+    setShowPreview(false);
+  };
+
+  const filteredGuests = getFilteredGuests();
+
   return (
-    <div className="bg-white p-10 rounded-xl shadow border text-center space-y-10">
+    <div className="bg-white p-10 rounded-xl shadow border text-center space-y-10 relative">
       <div className="flex flex-col items-center">
         <FileBarChart className="text-amber-500 mb-4" size={48} />
         <h3 className={`text-2xl uppercase ${GOLDEN_GRADIENT}`}>Official Oversight Ledger</h3>
@@ -591,17 +606,78 @@ function ReportSection({ t, guests, user, hotelProfile }: any) {
       </div>
 
       <button 
-        onClick={() => {
-          handleDownload('EXCEL');
-          handleDownload('WORD');
-          handleDownload('PPT');
-          handleDownload('PDF');
-        }}
+        onClick={() => handleDownload('ALL')}
         className="w-full py-4 bg-slate-900 text-white rounded-xl font-black uppercase text-xs tracking-widest hover:bg-slate-800 transition-all flex items-center justify-center gap-3 shadow-xl"
       >
         <Download size={18} />
         Generate All Formats for {periods.find(p => p.id === period)?.label}
       </button>
+
+      {showPreview && (
+        <div className="fixed inset-0 bg-black/50 z-[100] flex items-center justify-center p-4 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden">
+            <div className="p-6 border-b flex justify-between items-center bg-slate-50">
+              <h3 className="text-lg font-black text-slate-800 uppercase tracking-widest">{t.previewReport}</h3>
+              <button onClick={() => setShowPreview(false)} className="text-gray-400 hover:text-red-500 transition-colors"><X size={24}/></button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-6">
+              <div className="mb-6 text-left space-y-1">
+                <p className="text-xs font-black text-amber-600 uppercase">{t.reports} - {periods.find(p => p.id === period)?.label}</p>
+                <p className="text-[10px] text-gray-400 font-bold uppercase">{t.date}: {new Date().toLocaleDateString()}</p>
+              </div>
+              
+              {filteredGuests.length > 0 ? (
+                <div className="border rounded-lg overflow-hidden">
+                  <table className="w-full text-left text-[10px] font-bold uppercase">
+                    <thead className="bg-slate-100 text-slate-500">
+                      <tr>
+                        <th className="p-3">Full Name</th>
+                        <th className="p-3">Nationality</th>
+                        <th className="p-3">Room</th>
+                        <th className="p-3">Check-in</th>
+                        <th className="p-3">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y">
+                      {filteredGuests.map((g: any) => (
+                        <tr key={g.id} className="hover:bg-gray-50">
+                          <td className="p-3">{g.fullName}</td>
+                          <td className="p-3">{g.nationality}</td>
+                          <td className="p-3">{g.roomNumber}</td>
+                          <td className="p-3">{g.checkInDate}</td>
+                          <td className="p-3">
+                            {g.isWanted ? <span className="text-red-600">WANTED</span> : <span className="text-emerald-600">CLEAR</span>}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="py-20 text-center text-gray-400 font-black uppercase tracking-widest">
+                  {t.noDataForPeriod}
+                </div>
+              )}
+            </div>
+            <div className="p-6 border-t bg-slate-50 flex justify-end gap-4">
+              <button 
+                onClick={() => setShowPreview(false)} 
+                className="px-6 py-2.5 bg-white border border-gray-200 text-gray-600 rounded-lg text-xs font-black uppercase hover:bg-gray-50 transition-all"
+              >
+                {t.cancel}
+              </button>
+              <button 
+                onClick={confirmDownload} 
+                disabled={filteredGuests.length === 0}
+                className="px-8 py-2.5 bg-slate-900 text-white rounded-lg text-xs font-black uppercase hover:bg-slate-800 transition-all shadow-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              >
+                <Download size={14} />
+                {t.confirmDownload}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="pt-10 border-t flex justify-between items-center text-[9px] font-bold text-gray-400 uppercase text-left no-print">
         <div><p className="mb-6">Auditor Certification</p><div className="h-px bg-gray-100 w-32 mb-1"></div><p className="opacity-40">{t.supervisorName}</p></div>
