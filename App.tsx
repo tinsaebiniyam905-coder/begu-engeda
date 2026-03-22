@@ -16,7 +16,7 @@ import 'jspdf-autotable';
 import { Document, Packer, Paragraph, Table, TableRow, TableCell, WidthType, TextRun } from 'docx';
 import pptxgen from 'pptxgenjs';
 import { saveAs } from 'file-saver';
-import { db, auth } from './firebase';
+import { db, auth, handleFirestoreError, OperationType } from './firebase';
 import { 
   collection, onSnapshot, addDoc, setDoc, updateDoc, deleteDoc, doc, query, where, orderBy, 
   getDocs, getDocFromServer, Timestamp 
@@ -24,57 +24,6 @@ import {
 import { 
   GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut, User as FirebaseUser 
 } from 'firebase/auth';
-
-enum OperationType {
-  CREATE = 'create',
-  UPDATE = 'update',
-  DELETE = 'delete',
-  LIST = 'list',
-  GET = 'get',
-  WRITE = 'write',
-}
-
-interface FirestoreErrorInfo {
-  error: string;
-  operationType: OperationType;
-  path: string | null;
-  authInfo: {
-    userId: string | undefined;
-    email: string | null | undefined;
-    emailVerified: boolean | undefined;
-    isAnonymous: boolean | undefined;
-    tenantId: string | null | undefined;
-    providerInfo: {
-      providerId: string;
-      displayName: string | null;
-      email: string | null;
-      photoUrl: string | null;
-    }[];
-  }
-}
-
-function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
-  const errInfo: FirestoreErrorInfo = {
-    error: error instanceof Error ? error.message : String(error),
-    authInfo: {
-      userId: auth.currentUser?.uid,
-      email: auth.currentUser?.email,
-      emailVerified: auth.currentUser?.emailVerified,
-      isAnonymous: auth.currentUser?.isAnonymous,
-      tenantId: auth.currentUser?.tenantId,
-      providerInfo: auth.currentUser?.providerData.map(provider => ({
-        providerId: provider.providerId,
-        displayName: provider.displayName,
-        email: provider.email,
-        photoUrl: provider.photoURL
-      })) || []
-    },
-    operationType,
-    path
-  }
-  console.error('Firestore Error: ', JSON.stringify(errInfo));
-  throw new Error(JSON.stringify(errInfo));
-}
 
 class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean, errorInfo: string | null }> {
   constructor(props: { children: ReactNode }) {
@@ -235,26 +184,54 @@ function AppContent() {
 
   // Auth Listener
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
-        // Determine role based on email or other criteria
-        let role = UserRole.RECEPTION;
-        let username = firebaseUser.displayName || 'User';
-        
-        if (firebaseUser.email === 'tinsaebiniyam905@gmail.com') {
-          role = UserRole.SUPER_POLICE;
-          username = 'Police Commission';
-        } else if (firebaseUser.email?.includes('police')) {
-          role = UserRole.LOCAL_POLICE;
-          username = 'Local Police';
-        }
+        try {
+          const userDoc = await getDocFromServer(doc(db, 'users', firebaseUser.uid));
+          if (userDoc.exists()) {
+            const userData = userDoc.data();
+            setUser({ 
+              role: userData.role, 
+              username: userData.username, 
+              uid: firebaseUser.uid,
+              email: firebaseUser.email || undefined,
+              zone: userData.zone
+            });
+            
+            // Redirect to setup if missing critical info
+            if (userData.role === UserRole.LOCAL_POLICE && !userData.zone) {
+              setView('setupPolice');
+            } else if (userData.role === UserRole.RECEPTION) {
+              // Check if hotel exists
+              const hotelDoc = await getDocFromServer(doc(db, 'hotels', firebaseUser.uid));
+              if (!hotelDoc.exists()) setView('setupHotel');
+            }
+          } else {
+            let role = UserRole.RECEPTION;
+            let username = firebaseUser.displayName || 'User';
+            
+            if (firebaseUser.email === 'tinsaebiniyam905@gmail.com') {
+              role = UserRole.SUPER_POLICE;
+              username = 'Police Commission';
+            }
 
-        setUser({ 
-          role, 
-          username, 
-          uid: firebaseUser.uid,
-          zone: role === UserRole.LOCAL_POLICE ? 'Assosa Zone' : undefined // Default for demo
-        });
+            const newUser = { 
+              role, 
+              username, 
+              uid: firebaseUser.uid,
+              email: firebaseUser.email,
+              lastLogin: new Date().toISOString()
+            };
+            
+            await setDoc(doc(db, 'users', firebaseUser.uid), newUser);
+            setUser({ ...newUser, email: newUser.email || undefined });
+            
+            if (role === UserRole.RECEPTION) setView('setupHotel');
+            else if (role === UserRole.LOCAL_POLICE) setView('setupPolice');
+          }
+        } catch (error) {
+          console.error("Error fetching user data:", error);
+        }
       } else {
         setUser(null);
       }
@@ -267,31 +244,48 @@ function AppContent() {
   useEffect(() => {
     if (!isAuthReady || !user) return;
 
+    setSyncStatus('reconnecting');
+
     const unsubGuests = onSnapshot(collection(db, 'guests'), (snapshot) => {
       const data = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as Guest));
-      setGuests(data.sort((a, b) => b.id.localeCompare(a.id))); // Simple sort
-    }, (error) => handleFirestoreError(error, OperationType.LIST, 'guests'));
+      setGuests(data.sort((a, b) => b.id.localeCompare(a.id)));
+      setSyncStatus('connected');
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, 'guests');
+      setSyncStatus('error');
+    });
 
     const unsubWanted = onSnapshot(collection(db, 'wanted'), (snapshot) => {
       const data = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as WantedPerson));
       setWanted(data.length > 0 ? data : INITIAL_WANTED);
-    }, (error) => handleFirestoreError(error, OperationType.LIST, 'wanted'));
+      setSyncStatus('connected');
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, 'wanted');
+      setSyncStatus('error');
+    });
 
     const unsubNotifs = onSnapshot(collection(db, 'notifications'), (snapshot) => {
       const data = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as Notification));
       setNotifications(data.sort((a, b) => b.timestamp.localeCompare(a.timestamp)));
-    }, (error) => handleFirestoreError(error, OperationType.LIST, 'notifications'));
+      setSyncStatus('connected');
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, 'notifications');
+      setSyncStatus('error');
+    });
 
     const unsubHotels = onSnapshot(collection(db, 'hotels'), (snapshot) => {
       const data = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as HotelProfile));
       setAllHotels(data);
       
-      // If reception, find their specific hotel
       if (user.role === UserRole.RECEPTION) {
-        const myHotel = data.find(h => h.id === user.uid); // Using UID as hotel ID for simplicity
+        const myHotel = data.find(h => h.id === user.uid);
         if (myHotel) setHotelProfile(myHotel);
       }
-    }, (error) => handleFirestoreError(error, OperationType.LIST, 'hotels'));
+      setSyncStatus('connected');
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, 'hotels');
+      setSyncStatus('error');
+    });
 
     return () => {
       unsubGuests();
@@ -305,35 +299,7 @@ function AppContent() {
     const provider = new GoogleAuthProvider();
     try {
       const result = await signInWithPopup(auth, provider);
-      const email = result.user.email || '';
-      let role = UserRole.RECEPTION;
-      let username = result.user.displayName || 'User';
-      let zone = '';
-
-      if (email === 'tinsaebiniyam905@gmail.com') {
-        role = UserRole.SUPER_POLICE;
-        username = 'Police Commission';
-      } else if (email.includes('police')) {
-        role = UserRole.LOCAL_POLICE;
-        username = 'Local Police';
-        // Extract zone from email if possible, e.g., police.guba@gmail.com
-        const zoneMatch = email.match(/police\.(\w+)/);
-        if (zoneMatch) {
-          const zoneKey = zoneMatch[1].toLowerCase();
-          const foundZone = ZONES.find(z => z.toLowerCase().includes(zoneKey));
-          if (foundZone) zone = foundZone;
-        }
-      }
-
-      const userData = { role, username, uid: result.user.uid, email, zone };
-      setUser(userData);
-      
-      // Update user record in Firestore
-      await setDoc(doc(db, 'users', result.user.uid), {
-        ...userData,
-        lastLogin: new Date().toISOString()
-      }, { merge: true });
-
+      // Auth listener will handle the rest
       setView('dashboard');
     } catch (error) {
       console.error("Login failed:", error);
@@ -342,30 +308,7 @@ function AppContent() {
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Keeping legacy login for demo but encouraging Google Login
-    let userData: any = null;
-    if (loginData.username === 'reception' && loginData.password === '1234') {
-      userData = { role: UserRole.RECEPTION, username: 'Receptionist', uid: 'demo-reception' };
-      setView('setupHotel');
-    } else if (loginData.username === 'police' && loginData.password === 'police1234') {
-      userData = { role: UserRole.SUPER_POLICE, username: 'Police Commission', uid: 'demo-super-police' };
-      setView('agreement');
-    } else if (loginData.username === 'police' && loginData.password === '1234') {
-      userData = { role: UserRole.LOCAL_POLICE, username: 'Local Police', uid: 'demo-local-police' };
-      setView('setupPolice');
-    } else {
-      alert('Invalid credentials / የተሳሳተ መረጃ');
-      return;
-    }
-
-    if (userData) {
-      setUser(userData);
-      // Update user record in Firestore
-      await setDoc(doc(db, 'users', userData.uid), {
-        ...userData,
-        lastLogin: new Date().toISOString()
-      }, { merge: true });
-    }
+    alert('Please use Google Login for secure, multi-device synchronization. / እባክዎ ለደህንነቱ የተጠበቀ እና ለብዙ መሳሪያዎች ማመሳሰል በGoogle ይግቡ።');
   };
 
   const handleLogout = async () => { 
@@ -508,94 +451,134 @@ function AppContent() {
     return filtered;
   }, [notifications, user, hotelProfile, activePoliceZone]);
 
-  if (!user) {
+  if (!user && view !== 'utility') {
     return (
       <div className="min-h-screen bg-slate-950 flex items-center justify-center p-6 relative overflow-hidden">
         {/* Decorative background elements */}
-        <div className="absolute top-0 left-0 w-full h-full opacity-10 pointer-events-none">
-          <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-amber-500 rounded-full blur-[120px]"></div>
-          <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-blue-500 rounded-full blur-[120px]"></div>
+        <div className="absolute top-0 left-0 w-full h-full opacity-20 pointer-events-none">
+          <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] bg-amber-500 rounded-full blur-[150px] animate-pulse"></div>
+          <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-blue-600 rounded-full blur-[150px] animate-pulse" style={{ animationDelay: '2s' }}></div>
         </div>
 
-        <div className="bg-white rounded-3xl shadow-[0_20px_50px_rgba(0,0,0,0.3)] p-10 w-full max-w-md relative z-10 border border-white/20">
-          <div className="text-center mb-8">
-            <div className="relative inline-block mb-6">
-              <div className="absolute inset-0 bg-amber-500 blur-2xl opacity-20 rounded-full animate-pulse"></div>
-              <img 
-                src={LOGO_PATH} 
-                className="w-24 h-24 mx-auto relative z-10 drop-shadow-[0_10px_15px_rgba(0,0,0,0.2)] border-4 border-white rounded-full p-1 bg-white" 
-                alt="Logo"
-              />
+        <div className="bg-white/95 backdrop-blur-xl rounded-[2.5rem] shadow-[0_30px_100px_rgba(0,0,0,0.5)] p-12 w-full max-w-md relative z-10 border border-white/40 overflow-hidden">
+          {/* Top Decoration */}
+          <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-amber-600 via-yellow-400 to-amber-700"></div>
+          
+          <div className="text-center mb-10">
+            <div className="relative inline-block mb-8 group">
+              <div className="absolute inset-0 bg-amber-500 blur-3xl opacity-30 rounded-full group-hover:opacity-50 transition-opacity"></div>
+              <div className="relative z-10 p-1.5 bg-gradient-to-tr from-amber-600 to-yellow-400 rounded-full shadow-2xl transform transition-transform group-hover:scale-105">
+                <img 
+                  src={LOGO_PATH} 
+                  className="w-28 h-28 mx-auto rounded-full border-4 border-white bg-white object-contain" 
+                  alt="Logo"
+                />
+              </div>
             </div>
             
-            <h1 className={`text-3xl font-black mb-2 tracking-tighter ${GOLDEN_GRADIENT}`}>{t.appName}</h1>
+            <h1 className={`text-4xl font-black mb-3 tracking-tighter drop-shadow-md ${GOLDEN_GRADIENT}`}>{t.appName}</h1>
             
-            <div className="space-y-1 mb-8">
-              <p className="text-[10px] font-black text-slate-800 uppercase tracking-widest">{translations.am.policeCommission}</p>
-              <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">{translations.en.policeCommission}</p>
+            <div className="space-y-1.5 mb-8">
+              <p className="text-[11px] font-black text-slate-900 uppercase tracking-[0.2em]">{translations.am.policeCommission}</p>
+              <p className="text-[9px] font-bold text-slate-500 uppercase tracking-[0.15em]">{translations.en.policeCommission}</p>
             </div>
           </div>
 
-          <form onSubmit={handleLogin} className="space-y-4">
-            <div className="relative">
+          <form onSubmit={handleLogin} className="space-y-5">
+            <div className="relative group">
+              <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-amber-600 transition-colors">
+                <Users size={18} />
+              </div>
               <input 
                 type="text" 
                 placeholder={t.username} 
-                className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-5 py-4 outline-none focus:ring-2 focus:ring-amber-500 font-bold transition-all text-sm" 
+                className="w-full bg-slate-50 border border-slate-200 rounded-2xl pl-12 pr-5 py-4 outline-none focus:ring-2 focus:ring-amber-500 font-bold transition-all text-sm focus:bg-white" 
                 value={loginData.username} 
                 onChange={e => setLoginData({...loginData, username: e.target.value})} 
                 required 
               />
             </div>
-            <div className="relative">
+            <div className="relative group">
+              <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-amber-600 transition-colors">
+                <Fingerprint size={18} />
+              </div>
               <input 
                 type="password" 
                 placeholder={t.password} 
-                className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-5 py-4 outline-none focus:ring-2 focus:ring-amber-500 font-bold transition-all text-sm" 
+                className="w-full bg-slate-50 border border-slate-200 rounded-2xl pl-12 pr-5 py-4 outline-none focus:ring-2 focus:ring-amber-500 font-bold transition-all text-sm focus:bg-white" 
                 value={loginData.password} 
                 onChange={e => setLoginData({...loginData, password: e.target.value})} 
                 required 
               />
             </div>
-            <button className="w-full bg-slate-900 hover:bg-slate-800 text-white font-black py-4 rounded-2xl transition-all shadow-xl uppercase tracking-widest text-sm mt-4 active:scale-95">
+            <button className="w-full bg-slate-900 hover:bg-slate-800 text-white font-black py-4.5 rounded-2xl transition-all shadow-xl uppercase tracking-widest text-sm mt-2 active:scale-95 flex items-center justify-center gap-2">
+              <ShieldCheck size={18} />
               {t.login}
             </button>
           </form>
           
-          <div className="relative my-10">
+          <div className="relative my-12">
             <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-slate-100"></div></div>
             <div className="relative flex justify-center text-[10px] uppercase font-black tracking-widest">
-              <span className="bg-white px-4 text-slate-300">Secure Access</span>
+              <span className="bg-white px-6 text-slate-400">Cloud Synchronization</span>
             </div>
           </div>
 
           <button 
             onClick={handleGoogleLogin}
-            className="w-full bg-white border-2 border-slate-900 text-slate-900 font-black py-4 rounded-2xl transition-all flex items-center justify-center gap-3 uppercase text-[10px] tracking-widest hover:bg-slate-50 shadow-sm active:scale-95"
+            className="w-full bg-white border-2 border-slate-900 text-slate-900 font-black py-4.5 rounded-2xl transition-all flex items-center justify-center gap-3 uppercase text-[10px] tracking-widest hover:bg-slate-50 shadow-md active:scale-95 group"
           >
-            <Globe size={18} className="text-blue-600"/> {t.syncStatus === 'Connected' ? 'Syncing...' : 'Sign in with Google'}
+            <Globe size={20} className="text-blue-600 group-hover:rotate-12 transition-transform"/> 
+            {t.syncStatus === 'Connected' ? 'Syncing...' : 'Sign in with Google'}
           </button>
 
-          <div className="mt-8 flex justify-center gap-3">
-            <button onClick={() => handleLangChange('am')} className={`px-5 py-2 rounded-full text-[10px] font-black transition-all ${lang === 'am' ? 'bg-amber-500 text-white shadow-lg' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'}`}>አማርኛ</button>
-            <button onClick={() => handleLangChange('en')} className={`px-5 py-2 rounded-full text-[10px] font-black transition-all ${lang === 'en' ? 'bg-amber-500 text-white shadow-lg' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'}`}>ENGLISH</button>
+          <div className="mt-10 flex justify-center gap-4">
+            <button onClick={() => handleLangChange('am')} className={`px-6 py-2.5 rounded-full text-[11px] font-black transition-all ${lang === 'am' ? 'bg-amber-600 text-white shadow-lg scale-105' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}>አማርኛ</button>
+            <button onClick={() => handleLangChange('en')} className={`px-6 py-2.5 rounded-full text-[11px] font-black transition-all ${lang === 'en' ? 'bg-amber-600 text-white shadow-lg scale-105' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}>ENGLISH</button>
           </div>
 
-          <div className="mt-12 text-center space-y-4">
-            <div className="relative">
-              <div className="absolute inset-0 flex items-center justify-center opacity-5">
-                <ShieldCheck size={100} />
+          <div className="mt-14 text-center space-y-6">
+            <div className="relative px-4">
+              <div className="absolute -top-6 left-1/2 -translate-x-1/2 opacity-5 text-slate-900">
+                <ShieldAlert size={80} />
               </div>
-              <p className="text-sm font-serif italic font-black text-slate-800 tracking-tight leading-tight relative z-10">
+              <p className="text-base font-serif italic font-black text-slate-800 tracking-tight leading-relaxed relative z-10">
                 "{t.motto}"
               </p>
             </div>
             
-            <div className="pt-4 border-t border-slate-50">
-              <p className="text-[8px] text-amber-600 font-black uppercase tracking-[0.2em] leading-relaxed max-w-[200px] mx-auto opacity-80">
+            <div className="pt-6 border-t border-slate-100">
+              <p className="text-[9px] text-amber-700 font-black uppercase tracking-[0.25em] leading-relaxed max-w-[260px] mx-auto opacity-90">
                 {t.developerCredit}
               </p>
+              <button 
+                onClick={() => setView('utility')}
+                className="mt-4 text-[9px] font-black text-blue-600 uppercase tracking-widest hover:underline"
+              >
+                Learn More / ተጨማሪ መረጃ
+              </button>
             </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (view === 'utility' && !user) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center p-6">
+        <div className="bg-white p-10 rounded-3xl shadow-2xl border max-w-2xl space-y-8 relative overflow-hidden">
+          <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-amber-600 via-yellow-400 to-amber-700"></div>
+          <h3 className={`text-3xl text-center font-black uppercase tracking-tighter ${GOLDEN_GRADIENT}`}>{t.appUtility}</h3>
+          <p className="text-slate-700 font-bold leading-relaxed text-lg text-center">{t.utilityText}</p>
+          <div className="pt-8 border-t border-slate-100 text-center">
+             <p className="text-[10px] text-amber-700 font-black uppercase tracking-[0.25em] mb-8">{t.developerCredit}</p>
+             <button 
+               onClick={() => setView('dashboard')}
+               className="px-10 py-4 bg-slate-900 text-white rounded-2xl font-black uppercase text-xs tracking-widest hover:bg-slate-800 transition-all shadow-xl"
+             >
+               Back to Login / ወደ ሎጊን ተመለስ
+             </button>
           </div>
         </div>
       </div>
@@ -676,7 +659,10 @@ function AppContent() {
         <header className={`${isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-b'} p-4 flex justify-between items-center sticky top-0 z-30`}>
           <div className="flex items-center gap-4">
              <button className="md:hidden" onClick={() => setIsSidebarOpen(true)}><Menu/></button>
-             <h3 className={`font-bold uppercase text-sm tracking-widest ${isDarkMode ? 'text-slate-200' : 'text-slate-800'}`}>{(t as any)[view] || view}</h3>
+             <div className="flex items-center gap-2">
+                <h3 className={`font-bold uppercase text-sm tracking-widest ${isDarkMode ? 'text-slate-200' : 'text-slate-800'}`}>{(t as any)[view] || view}</h3>
+                <div className={`w-2 h-2 rounded-full ${syncStatus === 'connected' ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]' : syncStatus === 'reconnecting' ? 'bg-amber-500 animate-pulse' : 'bg-red-500'}`}></div>
+             </div>
           </div>
           <div className="flex items-center gap-4">
              <div className="text-right leading-none hidden sm:block">
