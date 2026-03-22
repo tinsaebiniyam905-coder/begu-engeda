@@ -73,11 +73,22 @@
       "properties": {
         "uid": { "type": "string", "description": "Firebase Auth UID" },
         "email": { "type": "string", "description": "User email" },
+        "username": { "type": "string", "description": "Display name or username" },
         "role": { "type": "string", "enum": ["RECEPTION", "LOCAL_POLICE", "SUPER_POLICE"], "description": "User role" },
         "hotelId": { "type": "string", "description": "Associated hotel ID (for RECEPTION)" },
         "zone": { "type": "string", "description": "Associated zone (for POLICE)" }
       },
       "required": ["uid", "email", "role"]
+    },
+    "UserPreference": {
+      "title": "User Preference",
+      "description": "User-specific settings.",
+      "type": "object",
+      "properties": {
+        "lang": { "type": "string", "enum": ["am", "en"], "description": "Preferred language" },
+        "isDarkMode": { "type": "boolean", "description": "Dark mode preference" },
+        "activePoliceZone": { "type": "string", "description": "Active zone for police filtering" }
+      }
     }
   },
   "firestore": {
@@ -100,6 +111,10 @@
     "/users/{userId}": {
       "schema": "User",
       "description": "Collection of user roles and permissions."
+    },
+    "/user_preferences/{userId}": {
+      "schema": "UserPreference",
+      "description": "Collection of user-specific settings."
     }
   }
 }
