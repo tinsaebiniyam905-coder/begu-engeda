@@ -1,0 +1,57 @@
+
+export type Language = 'am' | 'en';
+
+export enum UserRole {
+  RECEPTION = 'RECEPTION',
+  LOCAL_POLICE = 'LOCAL_POLICE',
+  SUPER_POLICE = 'SUPER_POLICE'
+}
+
+export interface HotelProfile {
+  id: string;
+  name: string;
+  address: string;
+  zone: string; // Zone or City Administration
+  receptionistName: string;
+  phoneNumber: string;
+  digitalIdPhoto?: string;
+}
+
+export interface Guest {
+  id: string;
+  fullName: string;
+  idPhoto: string;
+  nationality: string;
+  roomNumber: string;
+  hotelId: string;
+  hotelName: string;
+  hotelAddress: string;
+  hotelZone: string;
+  receptionistName: string;
+  receptionistPhone: string;
+  guestPhone: string;
+  origin: string;
+  purpose: string;
+  duration: string;
+  checkInDate: string;
+  isWanted?: boolean;
+}
+
+export interface WantedPerson {
+  id: string;
+  fullName: string;
+  photo: string;
+  description: string;
+  crime: string;
+  postedDate: string;
+}
+
+export interface Notification {
+  id: string;
+  title: string;
+  message: string;
+  type: 'danger' | 'info' | 'success';
+  timestamp: string;
+  targetZone?: string; // Routing to specific local police
+  guestId?: string;
+}
