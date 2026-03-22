@@ -505,17 +505,41 @@ function ReportSection({ t, guests, user, hotelProfile }: any) {
     const filtered = getFilteredGuests();
     const pres = new pptxgen();
     
+    // Title Slide
     const slide = pres.addSlide();
-    slide.addText("Begu Engeda - Official Guest Report", { x: 0.5, y: 0.5, fontSize: 24, bold: true, color: "363636" });
-    slide.addText(`Report Period: ${period} Days`, { x: 0.5, y: 1.2, fontSize: 14, color: "666666" });
-    slide.addText(`Generated on: ${new Date().toLocaleString()}`, { x: 0.5, y: 1.5, fontSize: 12, color: "999999" });
+    slide.addText("Begu Engeda - Official Guest Report", { x: 0.5, y: 1.5, w: 9, fontSize: 36, bold: true, color: "1e293b", align: "center" });
+    slide.addText(`${hotelProfile?.name || 'All Hotels'}`, { x: 0.5, y: 2.5, w: 9, fontSize: 24, color: "475569", align: "center" });
+    slide.addText(`Report Period: ${period} Days`, { x: 0.5, y: 3.5, w: 9, fontSize: 18, color: "64748b", align: "center" });
+    slide.addText(`Generated on: ${new Date().toLocaleString()}`, { x: 0.5, y: 4.5, w: 9, fontSize: 14, color: "94a3b8", align: "center" });
 
-    const rows = [
-      ['Full Name', 'Nationality', 'Room', 'Check-in', 'Status'],
-      ...filtered.slice(0, 10).map((g: any) => [g.fullName, g.nationality, g.roomNumber, g.checkInDate, g.isWanted ? 'WANTED' : 'CLEAR'])
-    ];
+    // Data Slides (10 guests per slide)
+    const guestsPerSlide = 10;
+    for (let i = 0; i < filtered.length; i += guestsPerSlide) {
+      const chunk = filtered.slice(i, i + guestsPerSlide);
+      const dataSlide = pres.addSlide();
+      dataSlide.addText(`Guest Data - Page ${Math.floor(i / guestsPerSlide) + 1}`, { x: 0.5, y: 0.3, fontSize: 18, bold: true, color: "1e293b" });
+      
+      const rows = [
+        ['Full Name', 'Nationality', 'Room', 'Check-in', 'Status'],
+        ...chunk.map((g: any) => [
+          g.fullName, 
+          g.nationality, 
+          g.roomNumber, 
+          g.checkInDate, 
+          g.isWanted ? 'WANTED' : 'CLEAR'
+        ])
+      ];
 
-    slide.addTable(rows, { x: 0.5, y: 2.0, w: 9.0, border: { type: 'solid', color: 'E1E1E1' }, fontSize: 10 });
+      dataSlide.addTable(rows, { 
+        x: 0.5, 
+        y: 0.8, 
+        w: 9.0, 
+        border: { type: 'solid', color: 'E1E1E1' }, 
+        fontSize: 10,
+        fill: { color: "F8FAFC" },
+        colW: [2.5, 2, 1, 2, 1.5]
+      });
+    }
 
     pres.writeFile({ fileName: `Begu_Engeda_Report_${period}_days.pptx` });
   };
@@ -565,6 +589,19 @@ function ReportSection({ t, guests, user, hotelProfile }: any) {
           </button>
         ))}
       </div>
+
+      <button 
+        onClick={() => {
+          handleDownload('EXCEL');
+          handleDownload('WORD');
+          handleDownload('PPT');
+          handleDownload('PDF');
+        }}
+        className="w-full py-4 bg-slate-900 text-white rounded-xl font-black uppercase text-xs tracking-widest hover:bg-slate-800 transition-all flex items-center justify-center gap-3 shadow-xl"
+      >
+        <Download size={18} />
+        Generate All Formats for {periods.find(p => p.id === period)?.label}
+      </button>
 
       <div className="pt-10 border-t flex justify-between items-center text-[9px] font-bold text-gray-400 uppercase text-left no-print">
         <div><p className="mb-6">Auditor Certification</p><div className="h-px bg-gray-100 w-32 mb-1"></div><p className="opacity-40">{t.supervisorName}</p></div>
