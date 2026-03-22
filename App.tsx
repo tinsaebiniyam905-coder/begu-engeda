@@ -50,6 +50,7 @@ export default function App() {
   const [hotelProfile, setHotelProfile] = useState<HotelProfile>(() => JSON.parse(localStorage.getItem('currentHotel') || '{"name":"","address":"","zone":"","receptionistName":"","phoneNumber":""}'));
   const [hasAgreed, setHasAgreed] = useState(false);
   const [activeAlert, setActiveAlert] = useState<Notification | null>(null);
+  const [activePoliceZone, setActivePoliceZone] = useState<string>('All');
 
   const t = translations[lang];
 
@@ -170,15 +171,32 @@ export default function App() {
 
   const visibleGuests = useMemo(() => {
     let filtered = guests;
-    if (user?.role === UserRole.LOCAL_POLICE && user.zone) {
+    if (user?.role === UserRole.SUPER_POLICE) {
+      if (activePoliceZone !== 'All') {
+        filtered = guests.filter(g => g.hotelZone === activePoliceZone);
+      }
+    } else if (user?.role === UserRole.LOCAL_POLICE && user.zone) {
       filtered = guests.filter(g => g.hotelZone === user.zone);
     } else if (user?.role === UserRole.RECEPTION && hotelProfile.id) {
       filtered = guests.filter(g => g.hotelId === hotelProfile.id);
     }
-    // SUPER_POLICE sees everything (no filtering)
     
     return filtered.filter(g => g.fullName.toLowerCase().includes(searchTerm.toLowerCase()));
-  }, [guests, searchTerm, user, hotelProfile]);
+  }, [guests, searchTerm, user, hotelProfile, activePoliceZone]);
+
+  const filteredNotifs = useMemo(() => {
+    let filtered = notifications;
+    if (user?.role === UserRole.SUPER_POLICE) {
+      if (activePoliceZone !== 'All') {
+        filtered = notifications.filter(n => n.targetZone === activePoliceZone);
+      }
+    } else if (user?.role === UserRole.LOCAL_POLICE && user.zone) {
+      filtered = notifications.filter(n => n.targetZone === user.zone);
+    } else if (user?.role === UserRole.RECEPTION && hotelProfile.zone) {
+      filtered = notifications.filter(n => n.targetZone === hotelProfile.zone);
+    }
+    return filtered;
+  }, [notifications, user, hotelProfile, activePoliceZone]);
 
   if (!user) {
     return (
@@ -269,6 +287,7 @@ export default function App() {
               <NavItem icon={<Users size={18}/>} label={t.guestList} active={view === 'guestList'} onClick={() => setView('guestList')} />
               <NavItem icon={<Building2 size={18}/>} label={t.hotelDirectory} active={view === 'hotelDirectory'} onClick={() => setView('hotelDirectory')} />
               <NavItem icon={<FileBarChart size={18}/>} label={t.reports} active={view === 'reports'} onClick={() => setView('reports')} />
+              <NavItem icon={<Settings size={18}/>} label={t.settings} active={view === 'policeSettings'} onClick={() => setView('policeSettings')} />
             </>
           )}
           <NavItem icon={<Bell size={18}/>} label={t.notifications} active={view === 'notifications'} count={notifications.length} onClick={() => setView('notifications')} />
@@ -290,7 +309,18 @@ export default function App() {
           <div className="flex items-center gap-4">
              <div className="text-right leading-none hidden sm:block">
                 <p className="text-xs font-black text-slate-900 uppercase">{user.username}</p>
-                <p className="text-[9px] text-amber-600 font-bold uppercase mt-1">{user.zone || hotelProfile.zone || "Headquarters"}</p>
+                {user.role === UserRole.SUPER_POLICE ? (
+                  <select 
+                    className="text-[9px] text-amber-600 font-bold uppercase mt-1 bg-transparent border-none outline-none cursor-pointer text-right appearance-none"
+                    value={activePoliceZone}
+                    onChange={(e) => setActivePoliceZone(e.target.value)}
+                  >
+                    <option value="All">All Jurisdictions</option>
+                    {ZONES.map(z => <option key={z} value={z}>{z}</option>)}
+                  </select>
+                ) : (
+                  <p className="text-[9px] text-amber-600 font-bold uppercase mt-1">{user.zone || hotelProfile.zone || "Headquarters"}</p>
+                )}
              </div>
              <div className="w-8 h-8 bg-amber-100 rounded text-amber-700 flex items-center justify-center font-bold">{user.username[0]}</div>
           </div>
@@ -329,7 +359,7 @@ export default function App() {
           {view === 'setupHotel' && <SetupForm hotelProfile={hotelProfile} setHotelProfile={setHotelProfile} onSubmit={handleSetupSubmit} t={t} handleFileUpload={handleFileUpload} />}
           {view === 'setupPolice' && <div className="max-w-md mx-auto bg-white p-8 rounded-xl shadow-lg border border-gray-100"><h3 className="text-xl font-bold mb-6 uppercase text-slate-800">Assigned Jurisdiction</h3><div className="space-y-4">{ZONES.map(z => <button key={z} onClick={() => { setUser({...user, zone: z}); setView('agreement'); }} className="w-full text-left p-4 bg-gray-50 border rounded-lg font-bold text-gray-600 hover:bg-amber-50 hover:border-amber-500 transition-all">{z}</button>)}</div></div>}
           
-          {view === 'dashboard' && <Dashboard user={user} t={t} guests={visibleGuests} notifications={notifications} wanted={wanted} setView={setView} hotelProfile={hotelProfile} />}
+          {view === 'dashboard' && <Dashboard user={user} t={t} guests={visibleGuests} notifications={filteredNotifs} wanted={wanted} setView={setView} hotelProfile={hotelProfile} activePoliceZone={activePoliceZone} />}
           {view === 'guestList' && <ListView items={visibleGuests} t={t} setZoomImg={setZoomImg} user={user} />}
           {view === 'registerGuest' && <GuestForm newGuest={newGuest} setNewGuest={setNewGuest} onSubmit={saveGuest} t={t} handleFileUpload={handleFileUpload} />}
           {view === 'addWanted' && <WantedForm wanted={wanted} setWanted={setWanted} t={t} handleFileUpload={handleFileUpload} addWanted={addWanted} newWanted={newWanted} setNewWanted={setNewWanted} />}
@@ -337,8 +367,9 @@ export default function App() {
           {view === 'hotelDirectory' && <HotelDir hotels={allHotels} t={t} user={user} />}
           {view === 'utility' && <div className="bg-white p-10 rounded-xl shadow-sm border space-y-6"><h3 className={`text-2xl text-center ${GOLDEN_GRADIENT}`}>{t.appUtility}</h3><p className="text-gray-600 font-bold leading-relaxed">{t.utilityText}</p><p className="text-amber-700 font-black uppercase text-center mt-10">{t.developerCredit}</p></div>}
           {view === 'reports' && <ReportSection t={t} guests={visibleGuests} user={user} hotelProfile={hotelProfile} />}
-          {view === 'notifications' && <NotifView notifications={notifications} t={t} setView={setView} user={user} hotelProfile={hotelProfile} />}
+          {view === 'notifications' && <NotifView notifications={filteredNotifs} t={t} setView={setView} user={user} hotelProfile={hotelProfile} />}
           {view === 'settings' && <SetupForm hotelProfile={hotelProfile} setHotelProfile={setHotelProfile} onSubmit={handleSetupSubmit} t={t} handleFileUpload={handleFileUpload} isSettings />}
+          {view === 'policeSettings' && <PoliceSettings t={t} lang={lang} setLang={setLang} activePoliceZone={activePoliceZone} setActivePoliceZone={setActivePoliceZone} user={user} />}
         </main>
       </div>
     </div>
@@ -388,7 +419,7 @@ function SetupForm({ hotelProfile, setHotelProfile, onSubmit, t, isSettings, han
   );
 }
 
-function Dashboard({ t, guests, notifications, wanted, setView, user, hotelProfile }: any) {
+function Dashboard({ t, guests, notifications, wanted, setView, user, hotelProfile, activePoliceZone }: any) {
   const stats = [
     { l: t.guestList, v: guests.length, c: 'bg-indigo-600', role: [UserRole.RECEPTION, UserRole.LOCAL_POLICE, UserRole.SUPER_POLICE] },
     { l: t.wantedPersons, v: wanted.length, c: 'bg-red-600', role: [UserRole.LOCAL_POLICE, UserRole.SUPER_POLICE] },
@@ -617,6 +648,115 @@ function DetailItem({ label, value }: any) {
     <div>
       <p className="text-[9px] font-black text-gray-400 uppercase mb-1">{label}</p>
       <p className="text-xs font-bold text-slate-800 uppercase">{value || 'N/A'}</p>
+    </div>
+  );
+}
+
+function PoliceSettings({ t, lang, setLang, activePoliceZone, setActivePoliceZone, user }: any) {
+  const [notificationsEnabled, setNotificationsEnabled] = useState(true);
+  const [autoRefresh, setAutoRefresh] = useState(true);
+
+  return (
+    <div className="max-w-2xl mx-auto space-y-6 pb-20">
+      <div className="bg-white p-8 rounded-xl shadow-sm border">
+        <h3 className="text-lg font-black text-slate-800 uppercase mb-6 flex items-center gap-2">
+          <Settings size={20} className="text-amber-500"/> System Preferences
+        </h3>
+        
+        <div className="space-y-8">
+          {/* Profile Section */}
+          <div className="flex items-center gap-4 p-4 bg-slate-50 rounded-lg border border-slate-100">
+             <div className="w-12 h-12 bg-amber-100 rounded-full flex items-center justify-center text-amber-700 font-black text-xl">
+                {user.username[0]}
+             </div>
+             <div>
+                <p className="text-xs font-black text-slate-800 uppercase">{user.username}</p>
+                <p className="text-[10px] text-gray-400 font-bold uppercase">{user.role} • Official Account</p>
+             </div>
+          </div>
+
+          <div className="flex items-center justify-between p-4 bg-slate-50 rounded-lg border border-slate-100">
+            <div>
+              <p className="text-xs font-black text-slate-800 uppercase">Language / ቋንቋ</p>
+              <p className="text-[10px] text-gray-400 font-bold uppercase">Select system display language</p>
+            </div>
+            <div className="flex gap-2">
+              <button onClick={() => setLang('am')} className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase transition-all ${lang === 'am' ? 'bg-amber-500 text-white shadow-md' : 'bg-white border text-gray-400'}`}>አማርኛ</button>
+              <button onClick={() => setLang('en')} className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase transition-all ${lang === 'en' ? 'bg-amber-500 text-white shadow-md' : 'bg-white border text-gray-400'}`}>English</button>
+            </div>
+          </div>
+
+          {user.role === UserRole.SUPER_POLICE && (
+            <div className="p-4 bg-slate-50 rounded-lg border border-slate-100">
+              <div className="mb-4">
+                <p className="text-xs font-black text-slate-800 uppercase">Active Jurisdiction Monitoring</p>
+                <p className="text-[10px] text-gray-400 font-bold uppercase">Filter all regional data by specific zone</p>
+              </div>
+              <select 
+                className="w-full bg-white border rounded-lg px-4 py-3 font-bold text-sm outline-none focus:ring-2 focus:ring-amber-500"
+                value={activePoliceZone}
+                onChange={(e) => setActivePoliceZone(e.target.value)}
+              >
+                <option value="All">All Jurisdictions (Regional Oversight)</option>
+                {ZONES.map(z => <option key={z} value={z}>{z}</option>)}
+              </select>
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+             <div className="p-4 bg-slate-50 rounded-lg border border-slate-100 flex items-center justify-between">
+                <div>
+                  <p className="text-[10px] font-black text-slate-800 uppercase">Push Notifications</p>
+                  <p className="text-[8px] text-gray-400 font-bold uppercase">Alerts for wanted persons</p>
+                </div>
+                <button 
+                  onClick={() => setNotificationsEnabled(!notificationsEnabled)}
+                  className={`w-10 h-5 rounded-full transition-all relative ${notificationsEnabled ? 'bg-amber-500' : 'bg-gray-300'}`}
+                >
+                  <div className={`absolute top-1 w-3 h-3 bg-white rounded-full transition-all ${notificationsEnabled ? 'right-1' : 'left-1'}`} />
+                </button>
+             </div>
+             <div className="p-4 bg-slate-50 rounded-lg border border-slate-100 flex items-center justify-between">
+                <div>
+                  <p className="text-[10px] font-black text-slate-800 uppercase">Auto-Refresh Feed</p>
+                  <p className="text-[8px] text-gray-400 font-bold uppercase">Real-time data updates</p>
+                </div>
+                <button 
+                  onClick={() => setAutoRefresh(!autoRefresh)}
+                  className={`w-10 h-5 rounded-full transition-all relative ${autoRefresh ? 'bg-amber-500' : 'bg-gray-300'}`}
+                >
+                  <div className={`absolute top-1 w-3 h-3 bg-white rounded-full transition-all ${autoRefresh ? 'right-1' : 'left-1'}`} />
+                </button>
+             </div>
+          </div>
+
+          <div className="p-4 bg-slate-50 rounded-lg border border-slate-100">
+            <p className="text-xs font-black text-slate-800 uppercase mb-4">Security & Privacy</p>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between text-[10px] font-bold text-gray-500 uppercase">
+                <span className="flex items-center gap-2"><CheckCircle2 size={12} className="text-emerald-500"/> Automatic Logout (Inactive)</span>
+                <span className="text-emerald-600">Enabled</span>
+              </div>
+              <div className="flex items-center justify-between text-[10px] font-bold text-gray-500 uppercase">
+                <span className="flex items-center gap-2"><CheckCircle2 size={12} className="text-emerald-500"/> Data Encryption</span>
+                <span className="text-emerald-600">Active (AES-256)</span>
+              </div>
+              <div className="flex items-center justify-between text-[10px] font-bold text-gray-500 uppercase">
+                <span className="flex items-center gap-2"><CheckCircle2 size={12} className="text-emerald-500"/> Audit Logging</span>
+                <span className="text-emerald-600">On</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="bg-amber-50 p-6 rounded-xl border border-amber-100 flex items-center gap-4">
+        <ShieldCheck className="text-amber-500" size={32} />
+        <div>
+          <p className="text-xs font-black text-amber-800 uppercase">Official Commission Terminal</p>
+          <p className="text-[10px] text-amber-700/70 font-bold leading-tight">This device is registered for official police use only. All actions are monitored by the Technology and Information Center. Unauthorized access is strictly prohibited.</p>
+        </div>
+      </div>
     </div>
   );
 }
@@ -1049,21 +1189,10 @@ function ReportSection({ t, guests, user, hotelProfile }: any) {
   );
 }
 
-function NotifView({ notifications, t, setView, user, hotelProfile }: any) {
-  const filteredNotifs = useMemo(() => {
-    if (user?.role === UserRole.LOCAL_POLICE && user.zone) {
-      return notifications.filter((n: any) => n.targetZone === user.zone);
-    }
-    if (user?.role === UserRole.RECEPTION && hotelProfile.zone) {
-      return notifications.filter((n: any) => n.targetZone === hotelProfile.zone);
-    }
-    // SUPER_POLICE sees all notifications
-    return notifications;
-  }, [notifications, user, hotelProfile]);
-
+function NotifView({ notifications, t, setView }: any) {
   return (
     <div className="max-w-2xl mx-auto space-y-4">
-      {filteredNotifs.map((n: any) => <div key={n.id} className={`p-6 bg-white border-l-[6px] rounded-xl shadow-sm flex gap-4 ${n.type === 'danger' ? 'border-red-600' : 'border-indigo-600'}`}>
+      {notifications.map((n: any) => <div key={n.id} className={`p-6 bg-white border-l-[6px] rounded-xl shadow-sm flex gap-4 ${n.type === 'danger' ? 'border-red-600' : 'border-indigo-600'}`}>
         <div className={`p-3 rounded-lg ${n.type === 'danger' ? 'bg-red-50 text-red-600' : 'bg-indigo-50 text-indigo-600'}`}><ShieldAlert size={20}/></div>
         <div className="flex-1">
           <div className="flex justify-between items-start mb-2"><p className="text-[9px] font-bold text-gray-400 uppercase">{n.timestamp}</p></div>
@@ -1072,7 +1201,7 @@ function NotifView({ notifications, t, setView, user, hotelProfile }: any) {
           {n.guestId && <button onClick={() => setView('guestList')} className="mt-4 px-4 py-1.5 bg-red-600 text-white text-[9px] font-bold uppercase rounded shadow">Intercept Details</button>}
         </div>
       </div>)}
-      {filteredNotifs.length === 0 && <div className="text-center py-20 text-gray-300 font-black uppercase tracking-widest text-sm select-none opacity-40">System Secure</div>}
+      {notifications.length === 0 && <div className="text-center py-20 text-gray-300 font-black uppercase tracking-widest text-sm select-none opacity-40">System Secure</div>}
     </div>
   );
 }
