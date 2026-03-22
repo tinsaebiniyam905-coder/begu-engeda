@@ -7,57 +7,198 @@ service cloud.firestore {
     // ===============================================================
     //
     // Collection: guests
-    // Document ID: guestId
-    // Fields: id, fullName, nationality, roomNumber, idPhoto, guestPhone, origin, purpose, duration, hotelId, hotelName, hotelAddress, hotelZone, receptionistName, receptionistPhone, checkInDate, isWanted
+    // Document ID: auto-generated
+    // Fields:
+    //   - fullName: string (required, < 100 chars)
+    //   - idPhoto: string (required, < 500k chars)
+    //   - nationality: string (optional, < 50 chars)
+    //   - roomNumber: string (required, < 20 chars)
+    //   - hotelName: string (required, < 100 chars)
+    //   - hotelAddress: string (optional, < 200 chars)
+    //   - hotelZone: string (optional, < 50 chars)
+    //   - receptionistName: string (optional, < 100 chars)
+    //   - receptionistPhone: string (optional, < 20 chars)
+    //   - checkInDate: string (required, ISO 8601 format)
+    //   - isWanted: bool (required)
+    //   - guestPhone: string (optional, < 20 chars)
+    //   - purpose: string (optional, < 200 chars)
+    //   - duration: string (optional, < 50 chars)
+    //   - origin: string (optional, < 100 chars)
+    //   - hotelId: string (required, UID of the hotel/receptionist)
     //
     // Collection: wanted
-    // Document ID: wantedId
-    // Fields: id, fullName, photo, description, crime, postedDate
+    // Document ID: auto-generated
+    // Fields:
+    //   - fullName: string (required, < 100 chars)
+    //   - photo: string (required, < 500k chars)
+    //   - description: string (optional, < 1000 chars)
+    //   - crime: string (required, < 200 chars)
+    //   - postedDate: string (required, ISO 8601 format)
+    //   - postedBy: string (required, UID of the police officer)
     //
     // Collection: notifications
-    // Document ID: notificationId
-    // Fields: id, title, message, type, timestamp, targetZone, guestId
+    // Document ID: auto-generated
+    // Fields:
+    //   - title: string (required, < 100 chars)
+    //   - message: string (required, < 500 chars)
+    //   - type: string (required, enum: ["info", "danger", "warning"])
+    //   - timestamp: string (required, ISO 8601 format)
+    //   - guestId: string (optional, UID of the guest)
+    //   - targetRole: string (optional, enum: ["RECEPTION", "LOCAL_POLICE", "SUPER_POLICE"])
     //
-    // Collection: hotels
-    // Document ID: hotelId
-    // Fields: id, name, address, zone, receptionistName, phoneNumber, logo
+    // Collection: hotelProfiles
+    // Document ID: hotelId (UID of the owner)
+    // Fields:
+    //   - name: string (required, < 100 chars)
+    //   - address: string (optional, < 200 chars)
+    //   - zone: string (optional, < 50 chars)
+    //   - receptionistName: string (optional, < 100 chars)
+    //   - receptionistPhone: string (optional, < 20 chars)
+    //   - ownerId: string (required, UID of the owner)
+    //
+    // Collection: users
+    // Document ID: userId (UID)
+    // Fields:
+    //   - uid: string (required, UID)
+    //   - email: string (required, email format)
+    //   - role: string (required, enum: ["RECEPTION", "LOCAL_POLICE", "SUPER_POLICE"])
+    //   - hotelId: string (optional, for RECEPTION)
+    //   - zone: string (optional, for POLICE)
     //
     // ===============================================================
 
+    // ===============================================================
     // Helper Functions
+    // ===============================================================
+
     function isAuthenticated() {
       return request.auth != null;
     }
 
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
     function isAdmin() {
       return isAuthenticated() &&
-        (request.auth.token.email == "tinsaebiniyam905@gmail.com" && request.auth.token.email_verified == true);
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'SUPER_POLICE' ||
+          (request.auth.token.email == "tinsaebiniyam905@gmail.com" && request.auth.token.email_verified == true));
     }
 
-    // Guests: Receptionists can create/read their own hotel's guests. Police can read all.
+    function isPolice() {
+      return isAuthenticated() && (
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'LOCAL_POLICE' ||
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'SUPER_POLICE' ||
+        isAdmin()
+      );
+    }
+
+    function isReception() {
+      return isAuthenticated() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'RECEPTION';
+    }
+
+    function hasRequiredFields(fields) {
+      return request.resource.data.keys().hasAll(fields);
+    }
+
+    function hasOnlyAllowedFields(fields) {
+      return request.resource.data.keys().hasOnly(fields);
+    }
+
+    function isValidEmail(email) {
+      return email is string && email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+
+    function isValidDateString(dateStr) {
+      return dateStr is string && dateStr.matches("^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}.*Z?$");
+    }
+
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+
+    function isValidGuest(data) {
+      return hasRequiredFields(['fullName', 'idPhoto', 'hotelName', 'checkInDate', 'hotelId', 'isWanted']) &&
+             data.fullName is string && data.fullName.size() > 0 && data.fullName.size() < 100 &&
+             data.idPhoto is string && data.idPhoto.size() < 500000 &&
+             data.hotelName is string && data.hotelName.size() < 100 &&
+             isValidDateString(data.checkInDate) &&
+             data.isWanted is bool &&
+             data.hotelId is string;
+    }
+
+    function isValidWanted(data) {
+      return hasRequiredFields(['fullName', 'photo', 'crime', 'postedDate', 'postedBy']) &&
+             data.fullName is string && data.fullName.size() > 0 && data.fullName.size() < 100 &&
+             data.photo is string && data.photo.size() < 500000 &&
+             data.crime is string && data.crime.size() < 200 &&
+             isValidDateString(data.postedDate) &&
+             data.postedBy is string;
+    }
+
+    function isValidNotification(data) {
+      return hasRequiredFields(['title', 'message', 'type', 'timestamp']) &&
+             data.title is string && data.title.size() < 100 &&
+             data.message is string && data.message.size() < 500 &&
+             data.type in ['info', 'danger', 'warning'] &&
+             isValidDateString(data.timestamp);
+    }
+
+    function isValidHotelProfile(data) {
+      return hasRequiredFields(['name', 'ownerId']) &&
+             data.name is string && data.name.size() < 100 &&
+             data.ownerId is string;
+    }
+
+    function isValidUser(data) {
+      return hasRequiredFields(['uid', 'email', 'role']) &&
+             data.uid is string &&
+             isValidEmail(data.email) &&
+             data.role in ['RECEPTION', 'LOCAL_POLICE', 'SUPER_POLICE'];
+    }
+
+    // ===============================================================
+    // Match Rules
+    // ===============================================================
+
     match /guests/{guestId} {
-      allow read: if isAuthenticated();
-      allow create, update: if isAuthenticated();
+      allow read: if isPolice() || (isReception() && resource.data.hotelId == request.auth.uid);
+      allow create: if isReception() && isValidGuest(request.resource.data) && request.resource.data.hotelId == request.auth.uid;
+      allow update: if (isReception() && resource.data.hotelId == request.auth.uid && isValidGuest(request.resource.data) && request.resource.data.hotelId == resource.data.hotelId) || isAdmin();
       allow delete: if isAdmin();
     }
 
-    // Wanted: Police can create/update/delete. Everyone can read.
     match /wanted/{wantedId} {
       allow read: if isAuthenticated();
-      allow write: if isAuthenticated(); // For demo, allowing all authenticated users to manage wanted list
-    }
-
-    // Notifications: System/Police can create. Relevant users can read.
-    match /notifications/{notificationId} {
-      allow read: if isAuthenticated();
-      allow create, update: if isAuthenticated();
+      allow create: if isPolice() && isValidWanted(request.resource.data) && request.resource.data.postedBy == request.auth.uid;
+      allow update: if (isPolice() && resource.data.postedBy == request.auth.uid && isValidWanted(request.resource.data) && request.resource.data.postedBy == resource.data.postedBy) || isAdmin();
       allow delete: if isAdmin();
     }
 
-    // Hotels: Receptionists can manage their profile. Everyone can read.
-    match /hotels/{hotelId} {
+    match /notifications/{notificationId} {
       allow read: if isAuthenticated();
-      allow write: if isAuthenticated();
+      allow create: if isAuthenticated() && isValidNotification(request.resource.data);
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    match /hotelProfiles/{hotelId} {
+      allow read: if isPolice() || isOwner(hotelId);
+      allow create: if isReception() && isOwner(hotelId) && isValidHotelProfile(request.resource.data) && request.resource.data.ownerId == request.auth.uid;
+      allow update: if (isReception() && isOwner(hotelId) && isValidHotelProfile(request.resource.data) && request.resource.data.ownerId == resource.data.ownerId) || isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    match /users/{userId} {
+      allow read: if isOwner(userId) || isPolice();
+      allow create: if (isOwner(userId) && request.resource.data.role == 'RECEPTION') || isAdmin();
+      allow update: if (isOwner(userId) && request.resource.data.role == resource.data.role) || isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // Default deny
+    match /{path=**} {
+      allow read, write: if false;
     }
   }
 }
