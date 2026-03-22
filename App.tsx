@@ -56,11 +56,14 @@ export default function App() {
     if (loginData.username === 'reception' && loginData.password === '1234') {
       setUser({ role: UserRole.RECEPTION, username: 'reception' });
       setView('setupHotel');
+    } else if (loginData.username === 'police' && loginData.password === 'police1234') {
+      // Police Commission (Super Police) - Full Monitoring
+      setUser({ role: UserRole.SUPER_POLICE, username: 'Police Commission' });
+      setView('dashboard');
     } else if (loginData.username === 'police' && loginData.password === '1234') {
+      // Local Police
       setUser({ role: UserRole.LOCAL_POLICE, username: 'police' });
       setView('setupPolice');
-    } else if (loginData.username === 'police' && loginData.password === 'police@1234') {
-      setUser({ role: UserRole.SUPER_POLICE, username: 'police_hq' });
     } else alert('Invalid credentials / የተሳሳተ መረጃ');
   };
 
