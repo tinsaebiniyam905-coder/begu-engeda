@@ -121,11 +121,11 @@ export default function App() {
       };
       setNotifications([notif, ...notifications]);
     }
-    setNewGuest({ fullName: '', nationality: '', roomNumber: '', idPhoto: '' });
+    setNewGuest({ fullName: '', nationality: '', roomNumber: '', idPhoto: '', guestPhone: '', origin: '', purpose: '', duration: '' });
     setView('guestList');
   };
 
-  const [newGuest, setNewGuest] = useState({ fullName: '', nationality: '', roomNumber: '', idPhoto: '' });
+  const [newGuest, setNewGuest] = useState({ fullName: '', nationality: '', roomNumber: '', idPhoto: '', guestPhone: '', origin: '', purpose: '', duration: '' });
   const [newWanted, setNewWanted] = useState({ fullName: '', photo: '', description: '', crime: '' });
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>, type: 'guest' | 'wanted' | 'hotel') => {
@@ -393,17 +393,40 @@ function Input({ label, value, onChange, type = "text", required }: any) {
 function ListView({ items, t, setZoomImg }: any) {
   return (
     <div className="bg-white rounded-xl shadow border overflow-hidden">
-      <table className="w-full text-left">
-        <thead className="bg-gray-50 text-[10px] font-bold uppercase text-gray-400"><tr><th className="px-6 py-4">ID</th><th className="px-6 py-4">Full Name</th><th className="px-6 py-4">Property Data</th><th className="px-6 py-4">Status</th></tr></thead>
-        <tbody className="divide-y text-xs font-bold uppercase text-gray-700">
-          {items.map((g: any) => <tr key={g.id} className="hover:bg-gray-50 transition-colors">
-            <td className="px-6 py-3"><img src={g.idPhoto} className="w-8 h-10 rounded object-cover shadow-sm cursor-zoom-in" onClick={() => setZoomImg(g.idPhoto)} /></td>
-            <td className="px-6 py-3">{g.fullName}</td>
-            <td className="px-6 py-3 leading-tight">{g.hotelName}<br/><span className="text-[9px] text-gray-400">{g.hotelZone}</span></td>
-            <td className="px-6 py-3">{g.isWanted ? <span className="text-red-600 animate-pulse">Wanted</span> : <span className="text-emerald-600">Clear</span>}</td>
-          </tr>)}
-        </tbody>
-      </table>
+      <div className="overflow-x-auto">
+        <table className="w-full text-left min-w-[1000px]">
+          <thead className="bg-gray-50 text-[10px] font-bold uppercase text-gray-400">
+            <tr>
+              <th className="px-6 py-4">ID</th>
+              <th className="px-6 py-4">{t.fullName}</th>
+              <th className="px-6 py-4">{t.guestPhone}</th>
+              <th className="px-6 py-4">{t.roomNumber}</th>
+              <th className="px-6 py-4">{t.origin} / {t.purpose}</th>
+              <th className="px-6 py-4">{t.duration}</th>
+              <th className="px-6 py-4">Property Data</th>
+              <th className="px-6 py-4">Status</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y text-xs font-bold uppercase text-gray-700">
+            {items.map((g: any) => (
+              <tr key={g.id} className="hover:bg-gray-50 transition-colors">
+                <td className="px-6 py-3"><img src={g.idPhoto} className="w-8 h-10 rounded object-cover shadow-sm cursor-zoom-in" onClick={() => setZoomImg(g.idPhoto)} /></td>
+                <td className="px-6 py-3">{g.fullName}</td>
+                <td className="px-6 py-3">{g.guestPhone}</td>
+                <td className="px-6 py-3">{g.roomNumber}</td>
+                <td className="px-6 py-3 leading-tight">{g.origin}<br/><span className="text-[9px] text-gray-400">{g.purpose}</span></td>
+                <td className="px-6 py-3">{g.duration}</td>
+                <td className="px-6 py-3 leading-tight">
+                  {g.hotelName}<br/>
+                  <span className="text-[9px] text-gray-400">{g.hotelZone}</span><br/>
+                  <span className="text-[8px] text-indigo-500">{g.receptionistName} ({g.receptionistPhone})</span>
+                </td>
+                <td className="px-6 py-3">{g.isWanted ? <span className="text-red-600 animate-pulse">Wanted</span> : <span className="text-emerald-600">Clear</span>}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
@@ -413,8 +436,18 @@ function GuestForm({ onSubmit, newGuest, setNewGuest, t, handleFileUpload }: any
     <form onSubmit={onSubmit} className="max-w-md mx-auto bg-white p-8 rounded-xl border shadow-lg space-y-4">
       <h3 className="text-xl font-bold mb-4 uppercase text-slate-800">{t.registerGuest}</h3>
       <Input label={t.fullName} value={newGuest.fullName} onChange={(v: string) => setNewGuest({...newGuest, fullName: v})} required />
-      <Input label={t.nationality} value={newGuest.nationality} onChange={(v: string) => setNewGuest({...newGuest, nationality: v})} required />
-      <Input label={t.roomNumber} value={newGuest.roomNumber} onChange={(v: string) => setNewGuest({...newGuest, roomNumber: v})} required />
+      <div className="grid grid-cols-2 gap-4">
+        <Input label={t.nationality} value={newGuest.nationality} onChange={(v: string) => setNewGuest({...newGuest, nationality: v})} required />
+        <Input label={t.guestPhone} value={newGuest.guestPhone} onChange={(v: string) => setNewGuest({...newGuest, guestPhone: v})} type="tel" required />
+      </div>
+      <div className="grid grid-cols-2 gap-4">
+        <Input label={t.roomNumber} value={newGuest.roomNumber} onChange={(v: string) => setNewGuest({...newGuest, roomNumber: v})} required />
+        <Input label={t.duration} value={newGuest.duration} onChange={(v: string) => setNewGuest({...newGuest, duration: v})} required />
+      </div>
+      <div className="grid grid-cols-2 gap-4">
+        <Input label={t.origin} value={newGuest.origin} onChange={(v: string) => setNewGuest({...newGuest, origin: v})} required />
+        <Input label={t.purpose} value={newGuest.purpose} onChange={(v: string) => setNewGuest({...newGuest, purpose: v})} required />
+      </div>
       <div className="p-4 bg-gray-50 border rounded-lg text-center cursor-pointer" onClick={() => document.getElementById('idUpload')?.click()}>
         <Camera className="mx-auto mb-2 text-gray-400" size={24}/>
         <p className="text-[10px] font-black uppercase text-gray-500">{t.idPhoto}</p>
@@ -498,10 +531,16 @@ function ReportSection({ t, guests, user, hotelProfile }: any) {
   const generateExcel = (data: any[]) => {
     const excelData = data.map((g: any) => ({
       'Full Name': g.fullName,
+      'Guest Phone': g.guestPhone,
       'Nationality': g.nationality,
       'Room Number': g.roomNumber,
+      'Origin': g.origin,
+      'Purpose': g.purpose,
+      'Duration': g.duration,
       'Hotel': g.hotelName,
       'Zone': g.hotelZone,
+      'Receptionist': g.receptionistName,
+      'Receptionist Phone': g.receptionistPhone,
       'Check-in Date': g.checkInDate,
       'Status': g.isWanted ? 'WANTED' : 'CLEAR'
     }));
@@ -524,16 +563,21 @@ function ReportSection({ t, guests, user, hotelProfile }: any) {
 
     (doc as any).autoTable({
       startY: 50,
-      head: [['Full Name', 'Nationality', 'Room', 'Check-in', 'Status']],
+      head: [['Full Name', 'Phone', 'Room', 'Origin', 'Purpose', 'Duration', 'Hotel', 'Check-in', 'Status']],
       body: data.map((g: any) => [
         g.fullName,
-        g.nationality,
+        g.guestPhone,
         g.roomNumber,
+        g.origin,
+        g.purpose,
+        g.duration,
+        g.hotelName,
         g.checkInDate,
         g.isWanted ? 'WANTED' : 'CLEAR'
       ]),
       theme: 'grid',
-      headStyles: { fillStyle: '#1e293b' }
+      headStyles: { fillStyle: '#1e293b' },
+      styles: { fontSize: 7 }
     });
 
     doc.save(`Begu_Engeda_Report_${period}_days.pdf`);
@@ -556,8 +600,12 @@ function ReportSection({ t, guests, user, hotelProfile }: any) {
               new TableRow({
                 children: [
                   new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: "Full Name", bold: true })] })] }),
-                  new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: "Nationality", bold: true })] })] }),
+                  new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: "Phone", bold: true })] })] }),
                   new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: "Room", bold: true })] })] }),
+                  new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: "Origin", bold: true })] })] }),
+                  new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: "Purpose", bold: true })] })] }),
+                  new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: "Duration", bold: true })] })] }),
+                  new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: "Hotel", bold: true })] })] }),
                   new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: "Check-in", bold: true })] })] }),
                   new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: "Status", bold: true })] })] }),
                 ],
@@ -565,8 +613,12 @@ function ReportSection({ t, guests, user, hotelProfile }: any) {
               ...data.map((g: any) => new TableRow({
                 children: [
                   new TableCell({ children: [new Paragraph(g.fullName)] }),
-                  new TableCell({ children: [new Paragraph(g.nationality)] }),
+                  new TableCell({ children: [new Paragraph(g.guestPhone)] }),
                   new TableCell({ children: [new Paragraph(g.roomNumber)] }),
+                  new TableCell({ children: [new Paragraph(g.origin)] }),
+                  new TableCell({ children: [new Paragraph(g.purpose)] }),
+                  new TableCell({ children: [new Paragraph(g.duration)] }),
+                  new TableCell({ children: [new Paragraph(g.hotelName)] }),
                   new TableCell({ children: [new Paragraph(g.checkInDate)] }),
                   new TableCell({ children: [new Paragraph(g.isWanted ? 'WANTED' : 'CLEAR')] }),
                 ],
@@ -599,11 +651,15 @@ function ReportSection({ t, guests, user, hotelProfile }: any) {
       dataSlide.addText(`Guest Data - Page ${Math.floor(i / guestsPerSlide) + 1}`, { x: 0.5, y: 0.3, fontSize: 18, bold: true, color: "1e293b" });
       
       const rows = [
-        ['Full Name', 'Nationality', 'Room', 'Check-in', 'Status'],
+        ['Full Name', 'Phone', 'Room', 'Origin', 'Purpose', 'Duration', 'Hotel', 'Check-in', 'Status'],
         ...chunk.map((g: any) => [
           g.fullName, 
-          g.nationality, 
+          g.guestPhone, 
           g.roomNumber, 
+          g.origin,
+          g.purpose,
+          g.duration,
+          g.hotelName,
           g.checkInDate, 
           g.isWanted ? 'WANTED' : 'CLEAR'
         ])
@@ -614,9 +670,9 @@ function ReportSection({ t, guests, user, hotelProfile }: any) {
         y: 0.8, 
         w: 9.0, 
         border: { type: 'solid', color: 'E1E1E1' }, 
-        fontSize: 10,
+        fontSize: 8,
         fill: { color: "F8FAFC" },
-        colW: [2.5, 2, 1, 2, 1.5]
+        colW: [1.5, 1, 0.5, 1, 1, 1, 1, 1, 1]
       });
     }
 
@@ -712,8 +768,11 @@ function ReportSection({ t, guests, user, hotelProfile }: any) {
                     <thead className="bg-slate-100 text-slate-500">
                       <tr>
                         <th className="p-3">Full Name</th>
-                        <th className="p-3">Nationality</th>
+                        <th className="p-3">Phone</th>
                         <th className="p-3">Room</th>
+                        <th className="p-3">Origin</th>
+                        <th className="p-3">Purpose</th>
+                        <th className="p-3">Duration</th>
                         <th className="p-3">Check-in</th>
                         <th className="p-3">Status</th>
                       </tr>
@@ -722,8 +781,11 @@ function ReportSection({ t, guests, user, hotelProfile }: any) {
                       {filteredGuests.map((g: any) => (
                         <tr key={g.id} className="hover:bg-gray-50">
                           <td className="p-3">{g.fullName}</td>
-                          <td className="p-3">{g.nationality}</td>
+                          <td className="p-3">{g.guestPhone}</td>
                           <td className="p-3">{g.roomNumber}</td>
+                          <td className="p-3">{g.origin}</td>
+                          <td className="p-3">{g.purpose}</td>
+                          <td className="p-3">{g.duration}</td>
                           <td className="p-3">{g.checkInDate}</td>
                           <td className="p-3">
                             {g.isWanted ? <span className="text-red-600">WANTED</span> : <span className="text-emerald-600">CLEAR</span>}
