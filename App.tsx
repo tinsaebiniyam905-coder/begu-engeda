@@ -207,7 +207,7 @@ function AppContent() {
               if (!hotelDoc.exists()) setView('setupHotel');
             }
           } else {
-            let role = UserRole.RECEPTION;
+            let role: UserRole = UserRole.RECEPTION;
             let username = firebaseUser.displayName || 'User';
             
             if (firebaseUser.email === 'tinsaebiniyam905@gmail.com') {
@@ -219,7 +219,7 @@ function AppContent() {
               role, 
               username, 
               uid: firebaseUser.uid,
-              email: firebaseUser.email,
+              email: firebaseUser.email || undefined,
               lastLogin: new Date().toISOString()
             };
             
@@ -227,7 +227,7 @@ function AppContent() {
             setUser({ ...newUser, email: newUser.email || undefined });
             
             if (role === UserRole.RECEPTION) setView('setupHotel');
-            else if (role === UserRole.LOCAL_POLICE) setView('setupPolice');
+            else if (role === (UserRole.LOCAL_POLICE as any)) setView('setupPolice');
           }
         } catch (error) {
           console.error("Error fetching user data:", error);
@@ -628,14 +628,14 @@ function AppContent() {
         </div>
         <nav className="flex-1 p-4 space-y-1">
           <NavItem icon={<TrendingUp size={18}/>} label={t.dashboard} active={view === 'dashboard'} onClick={() => setView('dashboard')} />
-          {user.role === UserRole.RECEPTION && (
+          {user?.role === UserRole.RECEPTION && (
             <>
               <NavItem icon={<UserPlus size={18}/>} label={t.registerGuest} active={view === 'registerGuest'} onClick={() => setView('registerGuest')} />
               <NavItem icon={<Users size={18}/>} label={t.guestList} active={view === 'guestList'} onClick={() => setView('guestList')} />
               <NavItem icon={<Settings size={18}/>} label={t.settings} active={view === 'settings'} onClick={() => setView('settings')} />
             </>
           )}
-          {(user.role === UserRole.LOCAL_POLICE || user.role === UserRole.SUPER_POLICE) && (
+          {(user?.role === UserRole.LOCAL_POLICE || user?.role === UserRole.SUPER_POLICE) && (
             <>
               <NavItem icon={<Plus size={18}/>} label={t.policeNotice} active={view === 'addWanted'} onClick={() => setView('addWanted')} />
               <NavItem icon={<AlertTriangle size={18}/>} label={t.wantedPersons} active={view === 'wantedPersons'} onClick={() => setView('wantedPersons')} />
@@ -666,8 +666,8 @@ function AppContent() {
           </div>
           <div className="flex items-center gap-4">
              <div className="text-right leading-none hidden sm:block">
-                <p className={`text-xs font-black uppercase ${isDarkMode ? 'text-slate-200' : 'text-slate-900'}`}>{user.username}</p>
-                {user.role === UserRole.SUPER_POLICE ? (
+                <p className={`text-xs font-black uppercase ${isDarkMode ? 'text-slate-200' : 'text-slate-900'}`}>{user?.username}</p>
+                {user?.role === UserRole.SUPER_POLICE ? (
                   <div className="flex items-center justify-end gap-1 mt-1">
                     <Globe size={10} className="text-amber-500" />
                     <select 
@@ -680,10 +680,10 @@ function AppContent() {
                     </select>
                   </div>
                 ) : (
-                  <p className="text-[9px] text-amber-600 font-bold uppercase mt-1">{user.zone || hotelProfile.zone || "Headquarters"}</p>
+                  <p className="text-[9px] text-amber-600 font-bold uppercase mt-1">{user?.zone || hotelProfile.zone || "Headquarters"}</p>
                 )}
              </div>
-             <div className="w-8 h-8 bg-amber-100 rounded text-amber-700 flex items-center justify-center font-bold shadow-sm">{user.username[0]}</div>
+             <div className="w-8 h-8 bg-amber-100 rounded text-amber-700 flex items-center justify-center font-bold shadow-sm">{user?.username[0]}</div>
           </div>
         </header>
 
@@ -718,7 +718,7 @@ function AppContent() {
           )}
           
           {view === 'setupHotel' && <SetupForm hotelProfile={hotelProfile} setHotelProfile={setHotelProfile} onSubmit={handleSetupSubmit} t={t} handleFileUpload={handleFileUpload} />}
-          {view === 'setupPolice' && <div className="max-w-md mx-auto bg-white p-8 rounded-xl shadow-lg border border-gray-100"><h3 className="text-xl font-bold mb-6 uppercase text-slate-800">Assigned Jurisdiction</h3><div className="space-y-4">{ZONES.map(z => <button key={z} onClick={() => { setUser({...user, zone: z}); setView('agreement'); }} className="w-full text-left p-4 bg-gray-50 border rounded-lg font-bold text-gray-600 hover:bg-amber-50 hover:border-amber-500 transition-all">{z}</button>)}</div></div>}
+          {view === 'setupPolice' && <div className="max-w-md mx-auto bg-white p-8 rounded-xl shadow-lg border border-gray-100"><h3 className="text-xl font-bold mb-6 uppercase text-slate-800">Assigned Jurisdiction</h3><div className="space-y-4">{ZONES.map(z => <button key={z} onClick={() => { if (user) setUser({...user, zone: z}); setView('agreement'); }} className="w-full text-left p-4 bg-gray-50 border rounded-lg font-bold text-gray-600 hover:bg-amber-50 hover:border-amber-500 transition-all">{z}</button>)}</div></div>}
           
           {view === 'dashboard' && <Dashboard user={user} t={t} guests={visibleGuests} notifications={filteredNotifs} wanted={wanted} setView={setView} hotelProfile={hotelProfile} activePoliceZone={activePoliceZone} />}
           {view === 'guestList' && <ListView items={visibleGuests} t={t} setZoomImg={setZoomImg} user={user} />}
