@@ -59,6 +59,10 @@ export const translations = {
     yearlyReport: "የአመት ሪፖርት",
     selectPeriod: "የሪፖርት ጊዜ ይምረጡ",
     generateReport: "ሪፖርት አውጣ",
+    previewReport: "ሪፖርቱን አስቀድመው ይመልከቱ",
+    confirmDownload: "አውርድ",
+    cancel: "ሰርዝ",
+    noDataForPeriod: "በዚህ ጊዜ ውስጥ ምንም መረጃ የለም",
   },
   en: {
     appName: "Begu Engeda",
@@ -117,5 +121,9 @@ export const translations = {
     yearlyReport: "Yearly Report",
     selectPeriod: "Select Report Period",
     generateReport: "Generate Report",
+    previewReport: "Preview Report",
+    confirmDownload: "Confirm Download",
+    cancel: "Cancel",
+    noDataForPeriod: "No data available for this period",
   }
 };
