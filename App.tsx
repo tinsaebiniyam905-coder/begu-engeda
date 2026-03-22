@@ -510,45 +510,93 @@ function AppContent() {
 
   if (!user) {
     return (
-      <div className="min-h-screen bg-slate-900 flex items-center justify-center p-6">
-        <div className="bg-white rounded-xl shadow-2xl p-8 w-full max-sm:w-full max-w-md">
-          <img src={LOGO_PATH} className="w-20 h-20 mx-auto mb-4" />
-          <h1 className={`text-xl text-center mb-1 ${GOLDEN_GRADIENT}`}>{t.appName}</h1>
-          <p className="text-[10px] font-bold text-gray-500 text-center uppercase mb-6 leading-tight">{t.developedBy}</p>
-          
-          <div className="mb-8 p-4 bg-amber-50 rounded-lg border border-amber-100">
-            <h4 className="text-[10px] font-black text-amber-800 uppercase mb-2 flex items-center gap-2">
-              <Info size={14}/> {t.appUtility}
-            </h4>
-            <p className="text-[9px] text-amber-900/70 font-bold leading-relaxed">
-              {t.utilityText.substring(0, 150)}...
-              <button onClick={() => alert(t.utilityText)} className="text-amber-600 underline ml-1">Read More</button>
-            </p>
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center p-6 relative overflow-hidden">
+        {/* Decorative background elements */}
+        <div className="absolute top-0 left-0 w-full h-full opacity-10 pointer-events-none">
+          <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-amber-500 rounded-full blur-[120px]"></div>
+          <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-blue-500 rounded-full blur-[120px]"></div>
+        </div>
+
+        <div className="bg-white rounded-3xl shadow-[0_20px_50px_rgba(0,0,0,0.3)] p-10 w-full max-w-md relative z-10 border border-white/20">
+          <div className="text-center mb-8">
+            <div className="relative inline-block mb-6">
+              <div className="absolute inset-0 bg-amber-500 blur-2xl opacity-20 rounded-full animate-pulse"></div>
+              <img 
+                src={LOGO_PATH} 
+                className="w-24 h-24 mx-auto relative z-10 drop-shadow-[0_10px_15px_rgba(0,0,0,0.2)] border-4 border-white rounded-full p-1 bg-white" 
+                alt="Logo"
+              />
+            </div>
+            
+            <h1 className={`text-3xl font-black mb-2 tracking-tighter ${GOLDEN_GRADIENT}`}>{t.appName}</h1>
+            
+            <div className="space-y-1 mb-8">
+              <p className="text-[10px] font-black text-slate-800 uppercase tracking-widest">{translations.am.policeCommission}</p>
+              <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">{translations.en.policeCommission}</p>
+            </div>
           </div>
 
           <form onSubmit={handleLogin} className="space-y-4">
-            <input type="text" placeholder={t.username} className="w-full bg-gray-50 border border-gray-200 rounded-lg px-4 py-3 outline-none focus:ring-2 focus:ring-amber-500 font-bold" value={loginData.username} onChange={e => setLoginData({...loginData, username: e.target.value})} required />
-            <input type="password" placeholder={t.password} className="w-full bg-gray-50 border border-gray-200 rounded-lg px-4 py-3 outline-none focus:ring-2 focus:ring-amber-500 font-bold" value={loginData.password} onChange={e => setLoginData({...loginData, password: e.target.value})} required />
-            <button className="w-full bg-slate-800 hover:bg-slate-700 text-white font-black py-3.5 rounded-lg transition-all shadow-lg uppercase text-sm mt-4">{t.login}</button>
+            <div className="relative">
+              <input 
+                type="text" 
+                placeholder={t.username} 
+                className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-5 py-4 outline-none focus:ring-2 focus:ring-amber-500 font-bold transition-all text-sm" 
+                value={loginData.username} 
+                onChange={e => setLoginData({...loginData, username: e.target.value})} 
+                required 
+              />
+            </div>
+            <div className="relative">
+              <input 
+                type="password" 
+                placeholder={t.password} 
+                className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-5 py-4 outline-none focus:ring-2 focus:ring-amber-500 font-bold transition-all text-sm" 
+                value={loginData.password} 
+                onChange={e => setLoginData({...loginData, password: e.target.value})} 
+                required 
+              />
+            </div>
+            <button className="w-full bg-slate-900 hover:bg-slate-800 text-white font-black py-4 rounded-2xl transition-all shadow-xl uppercase tracking-widest text-sm mt-4 active:scale-95">
+              {t.login}
+            </button>
           </form>
           
-          <div className="relative my-8">
-            <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-gray-200"></div></div>
-            <div className="relative flex justify-center text-[10px] uppercase font-black"><span className="bg-white px-4 text-gray-400">Or Sync Across Devices</span></div>
+          <div className="relative my-10">
+            <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-slate-100"></div></div>
+            <div className="relative flex justify-center text-[10px] uppercase font-black tracking-widest">
+              <span className="bg-white px-4 text-slate-300">Secure Access</span>
+            </div>
           </div>
 
           <button 
             onClick={handleGoogleLogin}
-            className="w-full bg-white border-2 border-slate-800 text-slate-800 font-black py-3 rounded-lg transition-all flex items-center justify-center gap-3 uppercase text-xs hover:bg-slate-50 shadow-sm"
+            className="w-full bg-white border-2 border-slate-900 text-slate-900 font-black py-4 rounded-2xl transition-all flex items-center justify-center gap-3 uppercase text-[10px] tracking-widest hover:bg-slate-50 shadow-sm active:scale-95"
           >
-            <Globe size={18}/> Sign in with Google
+            <Globe size={18} className="text-blue-600"/> {t.syncStatus === 'Connected' ? 'Syncing...' : 'Sign in with Google'}
           </button>
-          <div className="mt-8 flex justify-center gap-4">
-            <button onClick={() => setLang('am')} className={`px-4 py-1.5 rounded-full text-[10px] font-black ${lang === 'am' ? 'bg-amber-500 text-white' : 'bg-gray-100'}`}>አማርኛ</button>
-            <button onClick={() => setLang('en')} className={`px-4 py-1.5 rounded-full text-[10px] font-black ${lang === 'en' ? 'bg-amber-500 text-white' : 'bg-gray-100'}`}>EN</button>
+
+          <div className="mt-8 flex justify-center gap-3">
+            <button onClick={() => handleLangChange('am')} className={`px-5 py-2 rounded-full text-[10px] font-black transition-all ${lang === 'am' ? 'bg-amber-500 text-white shadow-lg' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'}`}>አማርኛ</button>
+            <button onClick={() => handleLangChange('en')} className={`px-5 py-2 rounded-full text-[10px] font-black transition-all ${lang === 'en' ? 'bg-amber-500 text-white shadow-lg' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'}`}>ENGLISH</button>
           </div>
-          <p className="text-[9px] text-gray-400 text-center mt-10 font-bold italic opacity-60">"{t.motto}"</p>
-          <p className="text-[8px] text-amber-600 text-center mt-2 font-black uppercase">{t.developerCredit}</p>
+
+          <div className="mt-12 text-center space-y-4">
+            <div className="relative">
+              <div className="absolute inset-0 flex items-center justify-center opacity-5">
+                <ShieldCheck size={100} />
+              </div>
+              <p className="text-sm font-serif italic font-black text-slate-800 tracking-tight leading-tight relative z-10">
+                "{t.motto}"
+              </p>
+            </div>
+            
+            <div className="pt-4 border-t border-slate-50">
+              <p className="text-[8px] text-amber-600 font-black uppercase tracking-[0.2em] leading-relaxed max-w-[200px] mx-auto opacity-80">
+                {t.developerCredit}
+              </p>
+            </div>
+          </div>
         </div>
       </div>
     );
@@ -590,8 +638,10 @@ function AppContent() {
     <div className={`min-h-screen flex flex-col md:flex-row font-sans transition-colors duration-300 ${isDarkMode ? 'bg-slate-950 text-slate-200' : 'bg-gray-50 text-slate-900'}`}>
       <aside className={`w-64 flex flex-col no-print hidden md:flex transition-colors duration-300 ${isDarkMode ? 'bg-slate-900 border-r border-slate-800' : 'bg-slate-800'}`}>
         <div className="p-6 border-b border-white/10 text-center">
-          <img src={LOGO_PATH} className="w-16 h-16 mx-auto mb-4" />
-          <h2 className={`text-xl ${GOLDEN_GRADIENT}`}>{t.appName}</h2>
+          <img src={LOGO_PATH} className="w-12 h-12 mx-auto mb-3 drop-shadow-lg" />
+          <h2 className={`text-lg font-black tracking-tighter ${GOLDEN_GRADIENT}`}>{t.appName}</h2>
+          <p className="text-[8px] font-black text-white/60 uppercase tracking-widest mt-1">{translations.am.policeCommission}</p>
+          <p className="text-[7px] font-bold text-white/40 uppercase tracking-wider">{translations.en.policeCommission}</p>
         </div>
         <nav className="flex-1 p-4 space-y-1">
           <NavItem icon={<TrendingUp size={18}/>} label={t.dashboard} active={view === 'dashboard'} onClick={() => setView('dashboard')} />
@@ -616,8 +666,8 @@ function AppContent() {
           <NavItem icon={<Info size={18}/>} label={t.appUtility} active={view === 'utility'} onClick={() => setView('utility')} />
         </nav>
         <div className="p-4 border-t border-white/10 text-center">
-          <p className="text-[8px] text-gray-400 mb-2 opacity-40 uppercase">{t.developerCredit}</p>
-          <p className="text-[7px] text-amber-500/50 mb-4 font-bold uppercase tracking-tighter">Benishangul Gumuz Police Tech Center</p>
+          <p className="text-[8px] text-white/60 mb-1 font-serif italic">"{t.motto}"</p>
+          <p className="text-[7px] text-amber-500/50 mb-4 font-black uppercase tracking-widest">{t.developerCredit}</p>
           <button onClick={handleLogout} className="flex items-center justify-center gap-2 w-full py-2 bg-red-600/20 text-red-500 rounded-lg text-xs font-bold uppercase"><LogOut size={16}/> {t.logout}</button>
         </div>
       </aside>
@@ -1482,8 +1532,11 @@ function ReportSection({ t, guests, user, hotelProfile }: any) {
     <div className="bg-white p-10 rounded-xl shadow border text-center space-y-10 relative">
       <div className="flex flex-col items-center">
         <FileBarChart className="text-amber-500 mb-4" size={48} />
-        <h3 className={`text-2xl uppercase ${GOLDEN_GRADIENT}`}>Official Oversight Ledger</h3>
-        <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{t.developedBy}</p>
+        <h3 className={`text-2xl font-black uppercase tracking-tighter ${GOLDEN_GRADIENT}`}>{t.appName}</h3>
+        <div className="text-center mt-1">
+          <p className="text-[9px] font-black text-slate-800 uppercase tracking-widest">{translations.am.policeCommission}</p>
+          <p className="text-[8px] font-bold text-slate-400 uppercase tracking-wider">{translations.en.policeCommission}</p>
+        </div>
       </div>
 
       <div className="max-w-xs mx-auto space-y-2">
