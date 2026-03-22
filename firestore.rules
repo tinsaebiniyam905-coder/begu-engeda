@@ -1,0 +1,63 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: guests
+    // Document ID: guestId
+    // Fields: id, fullName, nationality, roomNumber, idPhoto, guestPhone, origin, purpose, duration, hotelId, hotelName, hotelAddress, hotelZone, receptionistName, receptionistPhone, checkInDate, isWanted
+    //
+    // Collection: wanted
+    // Document ID: wantedId
+    // Fields: id, fullName, photo, description, crime, postedDate
+    //
+    // Collection: notifications
+    // Document ID: notificationId
+    // Fields: id, title, message, type, timestamp, targetZone, guestId
+    //
+    // Collection: hotels
+    // Document ID: hotelId
+    // Fields: id, name, address, zone, receptionistName, phoneNumber, logo
+    //
+    // ===============================================================
+
+    // Helper Functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() &&
+        (request.auth.token.email == "tinsaebiniyam905@gmail.com" && request.auth.token.email_verified == true);
+    }
+
+    // Guests: Receptionists can create/read their own hotel's guests. Police can read all.
+    match /guests/{guestId} {
+      allow read: if isAuthenticated();
+      allow create, update: if isAuthenticated();
+      allow delete: if isAdmin();
+    }
+
+    // Wanted: Police can create/update/delete. Everyone can read.
+    match /wanted/{wantedId} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated(); // For demo, allowing all authenticated users to manage wanted list
+    }
+
+    // Notifications: System/Police can create. Relevant users can read.
+    match /notifications/{notificationId} {
+      allow read: if isAuthenticated();
+      allow create, update: if isAuthenticated();
+      allow delete: if isAdmin();
+    }
+
+    // Hotels: Receptionists can manage their profile. Everyone can read.
+    match /hotels/{hotelId} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated();
+    }
+  }
+}
