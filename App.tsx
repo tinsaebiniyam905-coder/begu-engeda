@@ -61,7 +61,8 @@ export default function App() {
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
     if (loginData.username === 'reception' && loginData.password === '1234') {
-      setUser({ role: UserRole.RECEPTION, username: 'reception' });
+      setUser({ role: UserRole.RECEPTION, username: 'Receptionist' });
+      // Always go to setup/identify hotel first as multiple hotels share these credentials
       setView('setupHotel');
     } else if (loginData.username === 'police' && loginData.password === 'police1234') {
       // Police Commission (Super Police) - Full Monitoring
@@ -69,7 +70,7 @@ export default function App() {
       setView('agreement');
     } else if (loginData.username === 'police' && loginData.password === '1234') {
       // Local Police
-      setUser({ role: UserRole.LOCAL_POLICE, username: 'police' });
+      setUser({ role: UserRole.LOCAL_POLICE, username: 'Local Police' });
       setView('setupPolice');
     } else alert('Invalid credentials / የተሳሳተ መረጃ');
   };
@@ -157,19 +158,32 @@ export default function App() {
     let filtered = guests;
     if (user?.role === UserRole.LOCAL_POLICE && user.zone) {
       filtered = guests.filter(g => g.hotelZone === user.zone);
-    } else if (user?.role === UserRole.RECEPTION && hotelProfile.zone) {
+    } else if (user?.role === UserRole.RECEPTION && hotelProfile.id) {
       filtered = guests.filter(g => g.hotelId === hotelProfile.id);
     }
+    // SUPER_POLICE sees everything (no filtering)
+    
     return filtered.filter(g => g.fullName.toLowerCase().includes(searchTerm.toLowerCase()));
   }, [guests, searchTerm, user, hotelProfile]);
 
   if (!user) {
     return (
       <div className="min-h-screen bg-slate-900 flex items-center justify-center p-6">
-        <div className="bg-white rounded-xl shadow-2xl p-8 w-full max-sm:w-full max-w-sm">
-          <img src={LOGO_PATH} className="w-24 h-24 mx-auto mb-6" />
+        <div className="bg-white rounded-xl shadow-2xl p-8 w-full max-sm:w-full max-w-md">
+          <img src={LOGO_PATH} className="w-20 h-20 mx-auto mb-4" />
           <h1 className={`text-xl text-center mb-1 ${GOLDEN_GRADIENT}`}>{t.appName}</h1>
-          <p className="text-[10px] font-bold text-gray-500 text-center uppercase mb-8 leading-tight">{t.developedBy}</p>
+          <p className="text-[10px] font-bold text-gray-500 text-center uppercase mb-6 leading-tight">{t.developedBy}</p>
+          
+          <div className="mb-8 p-4 bg-amber-50 rounded-lg border border-amber-100">
+            <h4 className="text-[10px] font-black text-amber-800 uppercase mb-2 flex items-center gap-2">
+              <Info size={14}/> {t.appUtility}
+            </h4>
+            <p className="text-[9px] text-amber-900/70 font-bold leading-relaxed">
+              {t.utilityText.substring(0, 150)}...
+              <button onClick={() => alert(t.utilityText)} className="text-amber-600 underline ml-1">Read More</button>
+            </p>
+          </div>
+
           <form onSubmit={handleLogin} className="space-y-4">
             <input type="text" placeholder={t.username} className="w-full bg-gray-50 border border-gray-200 rounded-lg px-4 py-3 outline-none focus:ring-2 focus:ring-amber-500 font-bold" value={loginData.username} onChange={e => setLoginData({...loginData, username: e.target.value})} required />
             <input type="password" placeholder={t.password} className="w-full bg-gray-50 border border-gray-200 rounded-lg px-4 py-3 outline-none focus:ring-2 focus:ring-amber-500 font-bold" value={loginData.password} onChange={e => setLoginData({...loginData, password: e.target.value})} required />
@@ -246,7 +260,8 @@ export default function App() {
           <NavItem icon={<Info size={18}/>} label={t.appUtility} active={view === 'utility'} onClick={() => setView('utility')} />
         </nav>
         <div className="p-4 border-t border-white/10 text-center">
-          <p className="text-[8px] text-gray-400 mb-4 opacity-40 uppercase">{t.developerCredit}</p>
+          <p className="text-[8px] text-gray-400 mb-2 opacity-40 uppercase">{t.developerCredit}</p>
+          <p className="text-[7px] text-amber-500/50 mb-4 font-bold uppercase tracking-tighter">Benishangul Gumuz Police Tech Center</p>
           <button onClick={handleLogout} className="flex items-center justify-center gap-2 w-full py-2 bg-red-600/20 text-red-500 rounded-lg text-xs font-bold uppercase"><LogOut size={16}/> {t.logout}</button>
         </div>
       </aside>
@@ -279,7 +294,7 @@ export default function App() {
           {view === 'hotelDirectory' && <HotelDir hotels={allHotels} t={t} user={user} />}
           {view === 'utility' && <div className="bg-white p-10 rounded-xl shadow-sm border space-y-6"><h3 className={`text-2xl text-center ${GOLDEN_GRADIENT}`}>{t.appUtility}</h3><p className="text-gray-600 font-bold leading-relaxed">{t.utilityText}</p><p className="text-amber-700 font-black uppercase text-center mt-10">{t.developerCredit}</p></div>}
           {view === 'reports' && <ReportSection t={t} guests={visibleGuests} user={user} hotelProfile={hotelProfile} />}
-          {view === 'notifications' && <NotifView notifications={notifications} t={t} setView={setView} user={user} />}
+          {view === 'notifications' && <NotifView notifications={notifications} t={t} setView={setView} user={user} hotelProfile={hotelProfile} />}
           {view === 'settings' && <SetupForm hotelProfile={hotelProfile} setHotelProfile={setHotelProfile} onSubmit={handleSetupSubmit} t={t} handleFileUpload={handleFileUpload} isSettings />}
         </main>
       </div>
@@ -752,13 +767,17 @@ function ReportSection({ t, guests, user, hotelProfile }: any) {
   );
 }
 
-function NotifView({ notifications, t, setView, user }: any) {
+function NotifView({ notifications, t, setView, user, hotelProfile }: any) {
   const filteredNotifs = useMemo(() => {
     if (user?.role === UserRole.LOCAL_POLICE && user.zone) {
       return notifications.filter((n: any) => n.targetZone === user.zone);
     }
+    if (user?.role === UserRole.RECEPTION && hotelProfile.zone) {
+      return notifications.filter((n: any) => n.targetZone === hotelProfile.zone);
+    }
+    // SUPER_POLICE sees all notifications
     return notifications;
-  }, [notifications, user]);
+  }, [notifications, user, hotelProfile]);
 
   return (
     <div className="max-w-2xl mx-auto space-y-4">
