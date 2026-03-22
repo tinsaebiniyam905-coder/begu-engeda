@@ -2,90 +2,104 @@
   "entities": {
     "Guest": {
       "title": "Guest",
-      "description": "A guest registered at a hotel",
+      "description": "A guest registered at a hotel.",
       "type": "object",
       "properties": {
-        "id": { "type": "string" },
-        "fullName": { "type": "string" },
-        "nationality": { "type": "string" },
-        "roomNumber": { "type": "string" },
-        "idPhoto": { "type": "string" },
-        "guestPhone": { "type": "string" },
-        "origin": { "type": "string" },
-        "purpose": { "type": "string" },
-        "duration": { "type": "string" },
-        "hotelId": { "type": "string" },
-        "hotelName": { "type": "string" },
-        "hotelAddress": { "type": "string" },
-        "hotelZone": { "type": "string" },
-        "receptionistName": { "type": "string" },
-        "receptionistPhone": { "type": "string" },
-        "checkInDate": { "type": "string" },
-        "isWanted": { "type": "boolean" }
+        "fullName": { "type": "string", "description": "Full name of the guest" },
+        "idPhoto": { "type": "string", "description": "Base64 or URL of the ID photo" },
+        "nationality": { "type": "string", "description": "Nationality of the guest" },
+        "roomNumber": { "type": "string", "description": "Room number assigned to the guest" },
+        "hotelName": { "type": "string", "description": "Name of the hotel" },
+        "hotelAddress": { "type": "string", "description": "Address of the hotel" },
+        "hotelZone": { "type": "string", "description": "Zone of the hotel" },
+        "receptionistName": { "type": "string", "description": "Name of the receptionist who registered the guest" },
+        "receptionistPhone": { "type": "string", "description": "Phone number of the receptionist" },
+        "checkInDate": { "type": "string", "description": "Date of check-in (ISO string)" },
+        "isWanted": { "type": "boolean", "description": "Whether the guest is on the wanted list" },
+        "guestPhone": { "type": "string", "description": "Phone number of the guest" },
+        "purpose": { "type": "string", "description": "Purpose of the visit" },
+        "duration": { "type": "string", "description": "Duration of stay" },
+        "origin": { "type": "string", "description": "Place of origin" },
+        "hotelId": { "type": "string", "description": "UID of the hotel/receptionist" }
       },
-      "required": ["id", "fullName", "hotelId"]
+      "required": ["fullName", "idPhoto", "hotelName", "checkInDate", "hotelId"]
     },
     "WantedPerson": {
-      "title": "WantedPerson",
-      "description": "A person wanted by the police",
+      "title": "Wanted Person",
+      "description": "A person wanted by the police.",
       "type": "object",
       "properties": {
-        "id": { "type": "string" },
-        "fullName": { "type": "string" },
-        "photo": { "type": "string" },
-        "description": { "type": "string" },
-        "crime": { "type": "string" },
-        "postedDate": { "type": "string" }
+        "fullName": { "type": "string", "description": "Full name of the wanted person" },
+        "photo": { "type": "string", "description": "Base64 or URL of the photo" },
+        "description": { "type": "string", "description": "Physical description or details" },
+        "crime": { "type": "string", "description": "Crime committed" },
+        "postedDate": { "type": "string", "description": "Date the notice was posted" },
+        "postedBy": { "type": "string", "description": "UID of the police officer who posted it" }
       },
-      "required": ["id", "fullName"]
+      "required": ["fullName", "photo", "crime", "postedDate", "postedBy"]
     },
     "Notification": {
       "title": "Notification",
-      "description": "A system notification or alert",
+      "description": "An alert or notification for users.",
       "type": "object",
       "properties": {
-        "id": { "type": "string" },
-        "title": { "type": "string" },
-        "message": { "type": "string" },
-        "type": { "type": "string", "enum": ["info", "danger"] },
-        "timestamp": { "type": "string" },
-        "targetZone": { "type": "string" },
-        "guestId": { "type": "string" }
+        "title": { "type": "string", "description": "Title of the notification" },
+        "message": { "type": "string", "description": "Content of the notification" },
+        "type": { "type": "string", "enum": ["info", "danger", "warning"], "description": "Type of alert" },
+        "timestamp": { "type": "string", "description": "Time the notification was created" },
+        "guestId": { "type": "string", "description": "Optional ID of the guest related to the alert" },
+        "targetRole": { "type": "string", "description": "Role that should see this notification" }
       },
-      "required": ["id", "title", "message"]
+      "required": ["title", "message", "type", "timestamp"]
     },
     "HotelProfile": {
-      "title": "HotelProfile",
-      "description": "Profile of a registered hotel",
+      "title": "Hotel Profile",
+      "description": "Profile information for a hotel.",
       "type": "object",
       "properties": {
-        "id": { "type": "string" },
-        "name": { "type": "string" },
-        "address": { "type": "string" },
-        "zone": { "type": "string" },
-        "receptionistName": { "type": "string" },
-        "phoneNumber": { "type": "string" },
-        "logo": { "type": "string" }
+        "name": { "type": "string", "description": "Name of the hotel" },
+        "address": { "type": "string", "description": "Address of the hotel" },
+        "zone": { "type": "string", "description": "Zone of the hotel" },
+        "receptionistName": { "type": "string", "description": "Name of the receptionist" },
+        "receptionistPhone": { "type": "string", "description": "Phone number of the receptionist" },
+        "ownerId": { "type": "string", "description": "UID of the owner" }
       },
-      "required": ["id", "name", "zone"]
+      "required": ["name", "ownerId"]
+    },
+    "User": {
+      "title": "User",
+      "description": "User account information.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Firebase Auth UID" },
+        "email": { "type": "string", "description": "User email" },
+        "role": { "type": "string", "enum": ["RECEPTION", "LOCAL_POLICE", "SUPER_POLICE"], "description": "User role" },
+        "hotelId": { "type": "string", "description": "Associated hotel ID (for RECEPTION)" },
+        "zone": { "type": "string", "description": "Associated zone (for POLICE)" }
+      },
+      "required": ["uid", "email", "role"]
     }
   },
   "firestore": {
     "/guests/{guestId}": {
       "schema": "Guest",
-      "description": "Collection of registered guests"
+      "description": "Collection of all registered guests."
     },
     "/wanted/{wantedId}": {
       "schema": "WantedPerson",
-      "description": "Collection of wanted persons"
+      "description": "Collection of all wanted persons."
     },
     "/notifications/{notificationId}": {
       "schema": "Notification",
-      "description": "Collection of system notifications"
+      "description": "Collection of all system notifications."
     },
-    "/hotels/{hotelId}": {
+    "/hotelProfiles/{hotelId}": {
       "schema": "HotelProfile",
-      "description": "Collection of hotel profiles"
+      "description": "Collection of hotel profiles."
+    },
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "Collection of user roles and permissions."
     }
   }
 }
