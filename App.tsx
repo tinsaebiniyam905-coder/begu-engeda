@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, Component, ErrorInfo, ReactNode } from 'react';
 import { UserRole, Guest, WantedPerson, Notification, Language, HotelProfile } from './types';
 import { translations } from './translations';
 import { 
@@ -16,6 +16,105 @@ import 'jspdf-autotable';
 import { Document, Packer, Paragraph, Table, TableRow, TableCell, WidthType, TextRun } from 'docx';
 import pptxgen from 'pptxgenjs';
 import { saveAs } from 'file-saver';
+import { db, auth } from './firebase';
+import { 
+  collection, onSnapshot, addDoc, setDoc, updateDoc, deleteDoc, doc, query, where, orderBy, 
+  getDocs, getDocFromServer, Timestamp 
+} from 'firebase/firestore';
+import { 
+  GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut, User as FirebaseUser 
+} from 'firebase/auth';
+
+enum OperationType {
+  CREATE = 'create',
+  UPDATE = 'update',
+  DELETE = 'delete',
+  LIST = 'list',
+  GET = 'get',
+  WRITE = 'write',
+}
+
+interface FirestoreErrorInfo {
+  error: string;
+  operationType: OperationType;
+  path: string | null;
+  authInfo: {
+    userId: string | undefined;
+    email: string | null | undefined;
+    emailVerified: boolean | undefined;
+    isAnonymous: boolean | undefined;
+    tenantId: string | null | undefined;
+    providerInfo: {
+      providerId: string;
+      displayName: string | null;
+      email: string | null;
+      photoUrl: string | null;
+    }[];
+  }
+}
+
+function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
+  const errInfo: FirestoreErrorInfo = {
+    error: error instanceof Error ? error.message : String(error),
+    authInfo: {
+      userId: auth.currentUser?.uid,
+      email: auth.currentUser?.email,
+      emailVerified: auth.currentUser?.emailVerified,
+      isAnonymous: auth.currentUser?.isAnonymous,
+      tenantId: auth.currentUser?.tenantId,
+      providerInfo: auth.currentUser?.providerData.map(provider => ({
+        providerId: provider.providerId,
+        displayName: provider.displayName,
+        email: provider.email,
+        photoUrl: provider.photoURL
+      })) || []
+    },
+    operationType,
+    path
+  }
+  console.error('Firestore Error: ', JSON.stringify(errInfo));
+  throw new Error(JSON.stringify(errInfo));
+}
+
+class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean, errorInfo: string | null }> {
+  constructor(props: { children: ReactNode }) {
+    super(props);
+    this.state = { hasError: false, errorInfo: null };
+  }
+
+  static getDerivedStateFromError(error: any) {
+    return { hasError: true, errorInfo: error.message };
+  }
+
+  componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+    console.error("Uncaught error:", error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="min-h-screen bg-slate-900 flex items-center justify-center p-6 text-center">
+          <div className="bg-white rounded-xl p-8 max-w-md shadow-2xl">
+            <ShieldAlert size={64} className="text-red-600 mx-auto mb-4" />
+            <h2 className="text-2xl font-black text-slate-800 uppercase mb-4">System Error</h2>
+            <p className="text-gray-600 mb-6 font-bold">An unexpected error occurred. Please refresh the page or contact support.</p>
+            <div className="bg-red-50 p-4 rounded-lg mb-6 text-left overflow-auto max-h-40">
+              <code className="text-[10px] text-red-700 font-mono">{this.state.errorInfo}</code>
+            </div>
+            <button 
+              onClick={() => window.location.reload()} 
+              className="w-full bg-slate-800 text-white font-black py-3 rounded-lg uppercase text-sm"
+            >
+              Reload Application
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    return this.props.children;
+  }
+}
 
 const INITIAL_WANTED: WantedPerson[] = [
   { id: 'w1', fullName: 'Abebe Kebede', photo: 'https://picsum.photos/seed/abebe/200/200', description: 'Medium build', crime: 'Theft', postedDate: '2023-10-15' },
@@ -35,73 +134,273 @@ const LOGO_PATH = 'https://img.icons8.com/color/512/police-badge.png';
 const GOLDEN_GRADIENT = "text-transparent bg-clip-text bg-gradient-to-r from-amber-600 via-yellow-400 to-amber-700 font-black drop-shadow-sm";
 
 export default function App() {
+  return (
+    <ErrorBoundary>
+      <AppContent />
+    </ErrorBoundary>
+  );
+}
+
+function AppContent() {
   const [lang, setLang] = useState<Language>('am');
-  const [user, setUser] = useState<{ role: UserRole; username: string; zone?: string } | null>(null);
-  const [guests, setGuests] = useState<Guest[]>(() => JSON.parse(localStorage.getItem('guests') || '[]'));
-  const [wanted, setWanted] = useState<WantedPerson[]>(() => JSON.parse(localStorage.getItem('wanted') || JSON.stringify(INITIAL_WANTED)));
-  const [notifications, setNotifications] = useState<Notification[]>(() => JSON.parse(localStorage.getItem('notifications') || '[]'));
+  const [user, setUser] = useState<{ role: UserRole; username: string; zone?: string; uid: string; email?: string } | null>(null);
+  const [guests, setGuests] = useState<Guest[]>([]);
+  const [wanted, setWanted] = useState<WantedPerson[]>([]);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
   const [view, setView] = useState<string>('dashboard');
   const [loginData, setLoginData] = useState({ username: '', password: '' });
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [zoomImg, setZoomImg] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   
-  const [allHotels, setAllHotels] = useState<HotelProfile[]>(() => JSON.parse(localStorage.getItem('allHotels') || '[]'));
-  const [hotelProfile, setHotelProfile] = useState<HotelProfile>(() => JSON.parse(localStorage.getItem('currentHotel') || '{"name":"","address":"","zone":"","receptionistName":"","phoneNumber":""}'));
+  const [allHotels, setAllHotels] = useState<HotelProfile[]>([]);
+  const [hotelProfile, setHotelProfile] = useState<HotelProfile>({id:"",name:"",address:"",zone:"",receptionistName:"",phoneNumber:""});
   const [hasAgreed, setHasAgreed] = useState(false);
   const [activeAlert, setActiveAlert] = useState<Notification | null>(null);
   const [activePoliceZone, setActivePoliceZone] = useState<string>('All');
+  const [isAuthReady, setIsAuthReady] = useState(false);
+  const [allUsers, setAllUsers] = useState<any[]>([]);
+  const [isDarkMode, setIsDarkMode] = useState(false);
+  const [syncStatus, setSyncStatus] = useState<'connected' | 'reconnecting' | 'error'>('connected');
+
+  useEffect(() => {
+    if (!user) return;
+
+    // Sync User Preferences
+    const unsubPrefs = onSnapshot(doc(db, 'user_preferences', user.uid), (doc) => {
+      if (doc.exists()) {
+        const data = doc.data();
+        if (data.lang) setLang(data.lang);
+        if (data.activePoliceZone) setActivePoliceZone(data.activePoliceZone);
+        if (data.isDarkMode !== undefined) setIsDarkMode(data.isDarkMode);
+      }
+    });
+
+    // Sync All Users (for Super Police)
+    let unsubUsers = () => {};
+    if (user.role === UserRole.SUPER_POLICE) {
+      unsubUsers = onSnapshot(collection(db, 'users'), (snapshot) => {
+        const data = snapshot.docs.map(doc => doc.data());
+        setAllUsers(data);
+      });
+    }
+
+    return () => {
+      unsubPrefs();
+      unsubUsers();
+    };
+  }, [user]);
+
+  // Update preferences in Firestore
+  const updatePreference = async (key: string, value: any) => {
+    if (!user) return;
+    try {
+      await setDoc(doc(db, 'user_preferences', user.uid), { [key]: value }, { merge: true });
+    } catch (error) {
+      console.error("Failed to update preference:", error);
+    }
+  };
+
+  const handleLangChange = (newLang: Language) => {
+    setLang(newLang);
+    updatePreference('lang', newLang);
+  };
+
+  const handleZoneChange = (newZone: string) => {
+    setActivePoliceZone(newZone);
+    updatePreference('activePoliceZone', newZone);
+  };
+
+  const handleDarkModeToggle = () => {
+    const newVal = !isDarkMode;
+    setIsDarkMode(newVal);
+    updatePreference('isDarkMode', newVal);
+  };
 
   const t = translations[lang];
 
-  useEffect(() => localStorage.setItem('guests', JSON.stringify(guests)), [guests]);
-  useEffect(() => localStorage.setItem('wanted', JSON.stringify(wanted)), [wanted]);
-  useEffect(() => localStorage.setItem('notifications', JSON.stringify(notifications)), [notifications]);
-  useEffect(() => localStorage.setItem('allHotels', JSON.stringify(allHotels)), [allHotels]);
-  useEffect(() => localStorage.setItem('currentHotel', JSON.stringify(hotelProfile)), [hotelProfile]);
+  // Test connection
+  useEffect(() => {
+    async function testConnection() {
+      try {
+        await getDocFromServer(doc(db, 'test', 'connection'));
+      } catch (error) {
+        if(error instanceof Error && error.message.includes('the client is offline')) {
+          console.error("Please check your Firebase configuration.");
+        }
+      }
+    }
+    testConnection();
+  }, []);
 
-  const handleLogin = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (loginData.username === 'reception' && loginData.password === '1234') {
-      setUser({ role: UserRole.RECEPTION, username: 'Receptionist' });
-      // Always go to setup/identify hotel first as multiple hotels share these credentials
-      setView('setupHotel');
-    } else if (loginData.username === 'police' && loginData.password === 'police1234') {
-      // Police Commission (Super Police) - Full Monitoring
-      setUser({ role: UserRole.SUPER_POLICE, username: 'Police Commission' });
-      setView('agreement');
-    } else if (loginData.username === 'police' && loginData.password === '1234') {
-      // Local Police
-      setUser({ role: UserRole.LOCAL_POLICE, username: 'Local Police' });
-      setView('setupPolice');
-    } else alert('Invalid credentials / የተሳሳተ መረጃ');
+  // Auth Listener
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
+      if (firebaseUser) {
+        // Determine role based on email or other criteria
+        let role = UserRole.RECEPTION;
+        let username = firebaseUser.displayName || 'User';
+        
+        if (firebaseUser.email === 'tinsaebiniyam905@gmail.com') {
+          role = UserRole.SUPER_POLICE;
+          username = 'Police Commission';
+        } else if (firebaseUser.email?.includes('police')) {
+          role = UserRole.LOCAL_POLICE;
+          username = 'Local Police';
+        }
+
+        setUser({ 
+          role, 
+          username, 
+          uid: firebaseUser.uid,
+          zone: role === UserRole.LOCAL_POLICE ? 'Assosa Zone' : undefined // Default for demo
+        });
+      } else {
+        setUser(null);
+      }
+      setIsAuthReady(true);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  // Firestore Listeners
+  useEffect(() => {
+    if (!isAuthReady || !user) return;
+
+    const unsubGuests = onSnapshot(collection(db, 'guests'), (snapshot) => {
+      const data = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as Guest));
+      setGuests(data.sort((a, b) => b.id.localeCompare(a.id))); // Simple sort
+    }, (error) => handleFirestoreError(error, OperationType.LIST, 'guests'));
+
+    const unsubWanted = onSnapshot(collection(db, 'wanted'), (snapshot) => {
+      const data = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as WantedPerson));
+      setWanted(data.length > 0 ? data : INITIAL_WANTED);
+    }, (error) => handleFirestoreError(error, OperationType.LIST, 'wanted'));
+
+    const unsubNotifs = onSnapshot(collection(db, 'notifications'), (snapshot) => {
+      const data = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as Notification));
+      setNotifications(data.sort((a, b) => b.timestamp.localeCompare(a.timestamp)));
+    }, (error) => handleFirestoreError(error, OperationType.LIST, 'notifications'));
+
+    const unsubHotels = onSnapshot(collection(db, 'hotels'), (snapshot) => {
+      const data = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as HotelProfile));
+      setAllHotels(data);
+      
+      // If reception, find their specific hotel
+      if (user.role === UserRole.RECEPTION) {
+        const myHotel = data.find(h => h.id === user.uid); // Using UID as hotel ID for simplicity
+        if (myHotel) setHotelProfile(myHotel);
+      }
+    }, (error) => handleFirestoreError(error, OperationType.LIST, 'hotels'));
+
+    return () => {
+      unsubGuests();
+      unsubWanted();
+      unsubNotifs();
+      unsubHotels();
+    };
+  }, [isAuthReady, user]);
+
+  const handleGoogleLogin = async () => {
+    const provider = new GoogleAuthProvider();
+    try {
+      const result = await signInWithPopup(auth, provider);
+      const email = result.user.email || '';
+      let role = UserRole.RECEPTION;
+      let username = result.user.displayName || 'User';
+      let zone = '';
+
+      if (email === 'tinsaebiniyam905@gmail.com') {
+        role = UserRole.SUPER_POLICE;
+        username = 'Police Commission';
+      } else if (email.includes('police')) {
+        role = UserRole.LOCAL_POLICE;
+        username = 'Local Police';
+        // Extract zone from email if possible, e.g., police.guba@gmail.com
+        const zoneMatch = email.match(/police\.(\w+)/);
+        if (zoneMatch) {
+          const zoneKey = zoneMatch[1].toLowerCase();
+          const foundZone = ZONES.find(z => z.toLowerCase().includes(zoneKey));
+          if (foundZone) zone = foundZone;
+        }
+      }
+
+      const userData = { role, username, uid: result.user.uid, email, zone };
+      setUser(userData);
+      
+      // Update user record in Firestore
+      await setDoc(doc(db, 'users', result.user.uid), {
+        ...userData,
+        lastLogin: new Date().toISOString()
+      }, { merge: true });
+
+      setView('dashboard');
+    } catch (error) {
+      console.error("Login failed:", error);
+    }
   };
 
-  const handleLogout = () => { 
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    // Keeping legacy login for demo but encouraging Google Login
+    let userData: any = null;
+    if (loginData.username === 'reception' && loginData.password === '1234') {
+      userData = { role: UserRole.RECEPTION, username: 'Receptionist', uid: 'demo-reception' };
+      setView('setupHotel');
+    } else if (loginData.username === 'police' && loginData.password === 'police1234') {
+      userData = { role: UserRole.SUPER_POLICE, username: 'Police Commission', uid: 'demo-super-police' };
+      setView('agreement');
+    } else if (loginData.username === 'police' && loginData.password === '1234') {
+      userData = { role: UserRole.LOCAL_POLICE, username: 'Local Police', uid: 'demo-local-police' };
+      setView('setupPolice');
+    } else {
+      alert('Invalid credentials / የተሳሳተ መረጃ');
+      return;
+    }
+
+    if (userData) {
+      setUser(userData);
+      // Update user record in Firestore
+      await setDoc(doc(db, 'users', userData.uid), {
+        ...userData,
+        lastLogin: new Date().toISOString()
+      }, { merge: true });
+    }
+  };
+
+  const handleLogout = async () => { 
+    await signOut(auth);
     setUser(null); 
     setView('dashboard'); 
     setIsSidebarOpen(false); 
     setHasAgreed(false);
   };
 
-  const handleSetupSubmit = (e: React.FormEvent) => {
+  const handleSetupSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (hotelProfile.name && hotelProfile.zone) {
-      if (!hotelProfile.id) hotelProfile.id = Math.random().toString(36).substr(2, 9);
-      const exists = allHotels.find(h => h.id === hotelProfile.id);
-      if (!exists) setAllHotels([...allHotels, hotelProfile]);
-      else setAllHotels(allHotels.map(h => h.id === hotelProfile.id ? hotelProfile : h));
-      setView('agreement');
+    if (hotelProfile.name && hotelProfile.zone && user) {
+      const hotelId = user.uid;
+      const updatedProfile = { ...hotelProfile, id: hotelId };
+      try {
+        await setDoc(doc(db, 'hotels', hotelId), updatedProfile);
+        setHotelProfile(updatedProfile);
+        setView('agreement');
+      } catch (error) {
+        handleFirestoreError(error, OperationType.WRITE, `hotels/${hotelId}`);
+      }
     } else alert("Fill all details / ሁሉንም ይሙሉ");
   };
 
-  const saveGuest = (e: React.FormEvent) => {
+  const saveGuest = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!user) return;
+
     const isWanted = wanted.some(w => w.fullName.toLowerCase().trim() === newGuest.fullName.toLowerCase().trim());
+    const guestId = Math.random().toString(36).substr(2, 9);
     const guest: Guest = {
       ...newGuest,
-      id: Math.random().toString(36).substr(2, 9),
-      hotelId: hotelProfile.id,
+      id: guestId,
+      hotelId: hotelProfile.id || user.uid,
       hotelName: hotelProfile.name,
       hotelAddress: hotelProfile.address,
       hotelZone: hotelProfile.zone,
@@ -110,22 +409,29 @@ export default function App() {
       checkInDate: new Date().toISOString().split('T')[0],
       isWanted
     };
-    setGuests([guest, ...guests]);
-    if (isWanted) {
-      const notif: Notification = {
-        id: Date.now().toString(),
-        title: t.alertWantedFound,
-        message: `${guest.fullName} at ${guest.hotelName}, Room ${guest.roomNumber}. (${guest.hotelZone})`,
-        type: 'danger',
-        timestamp: new Date().toLocaleTimeString(),
-        targetZone: guest.hotelZone,
-        guestId: guest.id
-      };
-      setNotifications([notif, ...notifications]);
-      // The alert will be shown to police users via useEffect monitoring notifications
+
+    try {
+      await setDoc(doc(db, 'guests', guestId), guest);
+      
+      if (isWanted) {
+        const notifId = Date.now().toString();
+        const notif: Notification = {
+          id: notifId,
+          title: t.alertWantedFound,
+          message: `${guest.fullName} at ${guest.hotelName}, Room ${guest.roomNumber}. (${guest.hotelZone})`,
+          type: 'danger',
+          timestamp: new Date().toLocaleTimeString(),
+          targetZone: guest.hotelZone,
+          guestId: guest.id
+        };
+        await setDoc(doc(db, 'notifications', notifId), notif);
+      }
+      
+      setNewGuest({ fullName: '', nationality: '', roomNumber: '', idPhoto: '', guestPhone: '', origin: '', purpose: '', duration: '' });
+      setView('guestList');
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, `guests/${guestId}`);
     }
-    setNewGuest({ fullName: '', nationality: '', roomNumber: '', idPhoto: '', guestPhone: '', origin: '', purpose: '', duration: '' });
-    setView('guestList');
   };
 
   // Monitor notifications for police alerts
@@ -133,8 +439,6 @@ export default function App() {
     if (user && (user.role === UserRole.LOCAL_POLICE || user.role === UserRole.SUPER_POLICE)) {
       const latestDanger = notifications.find(n => n.type === 'danger');
       if (latestDanger) {
-        // Only show if it's "new" (within last 10 seconds for demo purposes, or track seen alerts)
-        // For this app, we'll show the most recent one if it hasn't been cleared
         setActiveAlert(latestDanger);
       }
     }
@@ -157,16 +461,22 @@ export default function App() {
     }
   };
 
-  const addWanted = (e: React.FormEvent) => {
+  const addWanted = async (e: React.FormEvent) => {
     e.preventDefault();
+    const wantedId = Math.random().toString(36).substr(2, 9);
     const person: WantedPerson = {
       ...newWanted,
-      id: Math.random().toString(36).substr(2, 9),
+      id: wantedId,
       postedDate: new Date().toISOString().split('T')[0]
     };
-    setWanted([person, ...wanted]);
-    setNewWanted({ fullName: '', photo: '', description: '', crime: '' });
-    setView('dashboard');
+    
+    try {
+      await setDoc(doc(db, 'wanted', wantedId), person);
+      setNewWanted({ fullName: '', photo: '', description: '', crime: '' });
+      setView('dashboard');
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, `wanted/${wantedId}`);
+    }
   };
 
   const visibleGuests = useMemo(() => {
@@ -221,6 +531,18 @@ export default function App() {
             <input type="password" placeholder={t.password} className="w-full bg-gray-50 border border-gray-200 rounded-lg px-4 py-3 outline-none focus:ring-2 focus:ring-amber-500 font-bold" value={loginData.password} onChange={e => setLoginData({...loginData, password: e.target.value})} required />
             <button className="w-full bg-slate-800 hover:bg-slate-700 text-white font-black py-3.5 rounded-lg transition-all shadow-lg uppercase text-sm mt-4">{t.login}</button>
           </form>
+          
+          <div className="relative my-8">
+            <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-gray-200"></div></div>
+            <div className="relative flex justify-center text-[10px] uppercase font-black"><span className="bg-white px-4 text-gray-400">Or Sync Across Devices</span></div>
+          </div>
+
+          <button 
+            onClick={handleGoogleLogin}
+            className="w-full bg-white border-2 border-slate-800 text-slate-800 font-black py-3 rounded-lg transition-all flex items-center justify-center gap-3 uppercase text-xs hover:bg-slate-50 shadow-sm"
+          >
+            <Globe size={18}/> Sign in with Google
+          </button>
           <div className="mt-8 flex justify-center gap-4">
             <button onClick={() => setLang('am')} className={`px-4 py-1.5 rounded-full text-[10px] font-black ${lang === 'am' ? 'bg-amber-500 text-white' : 'bg-gray-100'}`}>አማርኛ</button>
             <button onClick={() => setLang('en')} className={`px-4 py-1.5 rounded-full text-[10px] font-black ${lang === 'en' ? 'bg-amber-500 text-white' : 'bg-gray-100'}`}>EN</button>
@@ -265,8 +587,8 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col md:flex-row font-sans">
-      <aside className="w-64 bg-slate-800 text-white flex flex-col no-print hidden md:flex">
+    <div className={`min-h-screen flex flex-col md:flex-row font-sans transition-colors duration-300 ${isDarkMode ? 'bg-slate-950 text-slate-200' : 'bg-gray-50 text-slate-900'}`}>
+      <aside className={`w-64 flex flex-col no-print hidden md:flex transition-colors duration-300 ${isDarkMode ? 'bg-slate-900 border-r border-slate-800' : 'bg-slate-800'}`}>
         <div className="p-6 border-b border-white/10 text-center">
           <img src={LOGO_PATH} className="w-16 h-16 mx-auto mb-4" />
           <h2 className={`text-xl ${GOLDEN_GRADIENT}`}>{t.appName}</h2>
@@ -301,28 +623,31 @@ export default function App() {
       </aside>
 
       <div className="flex-1 overflow-y-auto">
-        <header className="bg-white border-b p-4 flex justify-between items-center sticky top-0 z-30">
+        <header className={`${isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-b'} p-4 flex justify-between items-center sticky top-0 z-30`}>
           <div className="flex items-center gap-4">
              <button className="md:hidden" onClick={() => setIsSidebarOpen(true)}><Menu/></button>
-             <h3 className="font-bold text-slate-800 uppercase text-sm tracking-widest">{(t as any)[view] || view}</h3>
+             <h3 className={`font-bold uppercase text-sm tracking-widest ${isDarkMode ? 'text-slate-200' : 'text-slate-800'}`}>{(t as any)[view] || view}</h3>
           </div>
           <div className="flex items-center gap-4">
              <div className="text-right leading-none hidden sm:block">
-                <p className="text-xs font-black text-slate-900 uppercase">{user.username}</p>
+                <p className={`text-xs font-black uppercase ${isDarkMode ? 'text-slate-200' : 'text-slate-900'}`}>{user.username}</p>
                 {user.role === UserRole.SUPER_POLICE ? (
-                  <select 
-                    className="text-[9px] text-amber-600 font-bold uppercase mt-1 bg-transparent border-none outline-none cursor-pointer text-right appearance-none"
-                    value={activePoliceZone}
-                    onChange={(e) => setActivePoliceZone(e.target.value)}
-                  >
-                    <option value="All">All Jurisdictions</option>
-                    {ZONES.map(z => <option key={z} value={z}>{z}</option>)}
-                  </select>
+                  <div className="flex items-center justify-end gap-1 mt-1">
+                    <Globe size={10} className="text-amber-500" />
+                    <select 
+                      className="text-[9px] text-amber-600 font-black uppercase bg-transparent border-none outline-none cursor-pointer text-right appearance-none hover:text-amber-500 transition-colors"
+                      value={activePoliceZone}
+                      onChange={(e) => handleZoneChange(e.target.value)}
+                    >
+                      <option value="All" className={isDarkMode ? 'bg-slate-900' : 'bg-white'}>All Jurisdictions</option>
+                      {ZONES.map(z => <option key={z} value={z} className={isDarkMode ? 'bg-slate-900' : 'bg-white'}>{z}</option>)}
+                    </select>
+                  </div>
                 ) : (
                   <p className="text-[9px] text-amber-600 font-bold uppercase mt-1">{user.zone || hotelProfile.zone || "Headquarters"}</p>
                 )}
              </div>
-             <div className="w-8 h-8 bg-amber-100 rounded text-amber-700 flex items-center justify-center font-bold">{user.username[0]}</div>
+             <div className="w-8 h-8 bg-amber-100 rounded text-amber-700 flex items-center justify-center font-bold shadow-sm">{user.username[0]}</div>
           </div>
         </header>
 
@@ -369,7 +694,18 @@ export default function App() {
           {view === 'reports' && <ReportSection t={t} guests={visibleGuests} user={user} hotelProfile={hotelProfile} />}
           {view === 'notifications' && <NotifView notifications={filteredNotifs} t={t} setView={setView} user={user} hotelProfile={hotelProfile} />}
           {view === 'settings' && <SetupForm hotelProfile={hotelProfile} setHotelProfile={setHotelProfile} onSubmit={handleSetupSubmit} t={t} handleFileUpload={handleFileUpload} isSettings />}
-          {view === 'policeSettings' && <PoliceSettings t={t} lang={lang} setLang={setLang} activePoliceZone={activePoliceZone} setActivePoliceZone={setActivePoliceZone} user={user} />}
+          {view === 'policeSettings' && <PoliceSettings 
+            t={t} 
+            lang={lang} 
+            setLang={handleLangChange} 
+            activePoliceZone={activePoliceZone} 
+            setActivePoliceZone={handleZoneChange} 
+            user={user}
+            isDarkMode={isDarkMode}
+            setIsDarkMode={handleDarkModeToggle}
+            allUsers={allUsers}
+            syncStatus={syncStatus}
+          />}
         </main>
       </div>
     </div>
@@ -652,48 +988,70 @@ function DetailItem({ label, value }: any) {
   );
 }
 
-function PoliceSettings({ t, lang, setLang, activePoliceZone, setActivePoliceZone, user }: any) {
+function PoliceSettings({ t, lang, setLang, activePoliceZone, setActivePoliceZone, user, isDarkMode, setIsDarkMode, allUsers, syncStatus }: any) {
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [autoRefresh, setAutoRefresh] = useState(true);
+  const [showUserMgmt, setShowUserMgmt] = useState(false);
 
   return (
-    <div className="max-w-2xl mx-auto space-y-6 pb-20">
-      <div className="bg-white p-8 rounded-xl shadow-sm border">
-        <h3 className="text-lg font-black text-slate-800 uppercase mb-6 flex items-center gap-2">
-          <Settings size={20} className="text-amber-500"/> System Preferences
-        </h3>
+    <div className="max-w-4xl mx-auto space-y-6 pb-20">
+      <div className={`${isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border'} p-8 rounded-xl shadow-sm`}>
+        <div className="flex justify-between items-center mb-6">
+          <h3 className={`text-lg font-black uppercase flex items-center gap-2 ${isDarkMode ? 'text-slate-200' : 'text-slate-800'}`}>
+            <Settings size={20} className="text-amber-500"/> System Preferences
+          </h3>
+          <div className="flex items-center gap-2">
+            <div className={`w-2 h-2 rounded-full ${syncStatus === 'connected' ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'}`} />
+            <span className="text-[10px] font-black text-gray-400 uppercase">{syncStatus}</span>
+          </div>
+        </div>
         
         <div className="space-y-8">
           {/* Profile Section */}
-          <div className="flex items-center gap-4 p-4 bg-slate-50 rounded-lg border border-slate-100">
-             <div className="w-12 h-12 bg-amber-100 rounded-full flex items-center justify-center text-amber-700 font-black text-xl">
+          <div className={`flex items-center gap-4 p-4 rounded-lg border ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-slate-50 border-slate-100'}`}>
+             <div className="w-12 h-12 bg-amber-100 rounded-full flex items-center justify-center text-amber-700 font-black text-xl shadow-inner">
                 {user.username[0]}
              </div>
              <div>
-                <p className="text-xs font-black text-slate-800 uppercase">{user.username}</p>
+                <p className={`text-xs font-black uppercase ${isDarkMode ? 'text-slate-200' : 'text-slate-800'}`}>{user.username}</p>
                 <p className="text-[10px] text-gray-400 font-bold uppercase">{user.role} • Official Account</p>
              </div>
           </div>
 
-          <div className="flex items-center justify-between p-4 bg-slate-50 rounded-lg border border-slate-100">
-            <div>
-              <p className="text-xs font-black text-slate-800 uppercase">Language / ቋንቋ</p>
-              <p className="text-[10px] text-gray-400 font-bold uppercase">Select system display language</p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className={`flex items-center justify-between p-4 rounded-lg border ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-slate-50 border-slate-100'}`}>
+              <div>
+                <p className={`text-xs font-black uppercase ${isDarkMode ? 'text-slate-200' : 'text-slate-800'}`}>Language / ቋንቋ</p>
+                <p className="text-[10px] text-gray-400 font-bold uppercase">System display language</p>
+              </div>
+              <div className="flex gap-2">
+                <button onClick={() => setLang('am')} className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase transition-all ${lang === 'am' ? 'bg-amber-500 text-white shadow-md' : 'bg-white border text-gray-400'}`}>አማርኛ</button>
+                <button onClick={() => setLang('en')} className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase transition-all ${lang === 'en' ? 'bg-amber-500 text-white shadow-md' : 'bg-white border text-gray-400'}`}>English</button>
+              </div>
             </div>
-            <div className="flex gap-2">
-              <button onClick={() => setLang('am')} className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase transition-all ${lang === 'am' ? 'bg-amber-500 text-white shadow-md' : 'bg-white border text-gray-400'}`}>አማርኛ</button>
-              <button onClick={() => setLang('en')} className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase transition-all ${lang === 'en' ? 'bg-amber-500 text-white shadow-md' : 'bg-white border text-gray-400'}`}>English</button>
+
+            <div className={`flex items-center justify-between p-4 rounded-lg border ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-slate-50 border-slate-100'}`}>
+              <div>
+                <p className={`text-xs font-black uppercase ${isDarkMode ? 'text-slate-200' : 'text-slate-800'}`}>Dark Mode</p>
+                <p className="text-[10px] text-gray-400 font-bold uppercase">Toggle visual theme</p>
+              </div>
+              <button 
+                onClick={setIsDarkMode}
+                className={`w-10 h-5 rounded-full transition-all relative ${isDarkMode ? 'bg-amber-500' : 'bg-gray-300'}`}
+              >
+                <div className={`absolute top-1 w-3 h-3 bg-white rounded-full transition-all ${isDarkMode ? 'right-1' : 'left-1'}`} />
+              </button>
             </div>
           </div>
 
           {user.role === UserRole.SUPER_POLICE && (
-            <div className="p-4 bg-slate-50 rounded-lg border border-slate-100">
+            <div className={`p-4 rounded-lg border ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-slate-50 border-slate-100'}`}>
               <div className="mb-4">
-                <p className="text-xs font-black text-slate-800 uppercase">Active Jurisdiction Monitoring</p>
+                <p className={`text-xs font-black uppercase ${isDarkMode ? 'text-slate-200' : 'text-slate-800'}`}>Active Jurisdiction Monitoring</p>
                 <p className="text-[10px] text-gray-400 font-bold uppercase">Filter all regional data by specific zone</p>
               </div>
               <select 
-                className="w-full bg-white border rounded-lg px-4 py-3 font-bold text-sm outline-none focus:ring-2 focus:ring-amber-500"
+                className={`w-full border rounded-lg px-4 py-3 font-bold text-sm outline-none focus:ring-2 focus:ring-amber-500 ${isDarkMode ? 'bg-slate-900 border-slate-700 text-slate-200' : 'bg-white border-slate-200'}`}
                 value={activePoliceZone}
                 onChange={(e) => setActivePoliceZone(e.target.value)}
               >
@@ -704,9 +1062,9 @@ function PoliceSettings({ t, lang, setLang, activePoliceZone, setActivePoliceZon
           )}
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-             <div className="p-4 bg-slate-50 rounded-lg border border-slate-100 flex items-center justify-between">
+             <div className={`p-4 rounded-lg border ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-slate-50 border-slate-100'} flex items-center justify-between`}>
                 <div>
-                  <p className="text-[10px] font-black text-slate-800 uppercase">Push Notifications</p>
+                  <p className={`text-[10px] font-black uppercase ${isDarkMode ? 'text-slate-200' : 'text-slate-800'}`}>Push Notifications</p>
                   <p className="text-[8px] text-gray-400 font-bold uppercase">Alerts for wanted persons</p>
                 </div>
                 <button 
@@ -716,9 +1074,9 @@ function PoliceSettings({ t, lang, setLang, activePoliceZone, setActivePoliceZon
                   <div className={`absolute top-1 w-3 h-3 bg-white rounded-full transition-all ${notificationsEnabled ? 'right-1' : 'left-1'}`} />
                 </button>
              </div>
-             <div className="p-4 bg-slate-50 rounded-lg border border-slate-100 flex items-center justify-between">
+             <div className={`p-4 rounded-lg border ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-slate-50 border-slate-100'} flex items-center justify-between`}>
                 <div>
-                  <p className="text-[10px] font-black text-slate-800 uppercase">Auto-Refresh Feed</p>
+                  <p className={`text-[10px] font-black uppercase ${isDarkMode ? 'text-slate-200' : 'text-slate-800'}`}>Auto-Refresh Feed</p>
                   <p className="text-[8px] text-gray-400 font-bold uppercase">Real-time data updates</p>
                 </div>
                 <button 
@@ -730,8 +1088,25 @@ function PoliceSettings({ t, lang, setLang, activePoliceZone, setActivePoliceZon
              </div>
           </div>
 
-          <div className="p-4 bg-slate-50 rounded-lg border border-slate-100">
-            <p className="text-xs font-black text-slate-800 uppercase mb-4">Security & Privacy</p>
+          {user.role === UserRole.SUPER_POLICE && (
+            <div className="space-y-4">
+              <button 
+                onClick={() => setShowUserMgmt(!showUserMgmt)}
+                className={`w-full py-3 rounded-lg text-[10px] font-black uppercase flex items-center justify-center gap-2 border transition-all ${showUserMgmt ? 'bg-slate-900 text-white' : 'bg-white text-slate-600 hover:bg-slate-50'}`}
+              >
+                <Users size={14}/> {showUserMgmt ? 'Hide User Directory' : 'View Active Personnel Directory'}
+              </button>
+              
+              {showUserMgmt && (
+                <div className="animate-in fade-in slide-in-from-top-4 duration-300">
+                  <UserManagement users={allUsers} t={t} isDarkMode={isDarkMode} />
+                </div>
+              )}
+            </div>
+          )}
+
+          <div className={`p-4 rounded-lg border ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-slate-50 border-slate-100'}`}>
+            <p className={`text-xs font-black uppercase mb-4 ${isDarkMode ? 'text-slate-200' : 'text-slate-800'}`}>Security & Privacy</p>
             <div className="space-y-3">
               <div className="flex items-center justify-between text-[10px] font-bold text-gray-500 uppercase">
                 <span className="flex items-center gap-2"><CheckCircle2 size={12} className="text-emerald-500"/> Automatic Logout (Inactive)</span>
@@ -750,13 +1125,52 @@ function PoliceSettings({ t, lang, setLang, activePoliceZone, setActivePoliceZon
         </div>
       </div>
 
-      <div className="bg-amber-50 p-6 rounded-xl border border-amber-100 flex items-center gap-4">
+      <div className={`${isDarkMode ? 'bg-amber-900/20 border-amber-900/30' : 'bg-amber-50 border-amber-100'} p-6 rounded-xl border flex items-center gap-4`}>
         <ShieldCheck className="text-amber-500" size={32} />
         <div>
-          <p className="text-xs font-black text-amber-800 uppercase">Official Commission Terminal</p>
-          <p className="text-[10px] text-amber-700/70 font-bold leading-tight">This device is registered for official police use only. All actions are monitored by the Technology and Information Center. Unauthorized access is strictly prohibited.</p>
+          <p className={`text-xs font-black uppercase ${isDarkMode ? 'text-amber-200' : 'text-amber-800'}`}>Official Commission Terminal</p>
+          <p className={`text-[10px] font-bold leading-tight ${isDarkMode ? 'text-amber-300/70' : 'text-amber-700/70'}`}>This device is registered for official police use only. All actions are monitored by the Technology and Information Center. Unauthorized access is strictly prohibited.</p>
         </div>
       </div>
+    </div>
+  );
+}
+
+function UserManagement({ users, t, isDarkMode }: any) {
+  return (
+    <div className={`rounded-xl shadow border overflow-hidden ${isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}>
+      <table className="w-full text-left text-[11px] font-bold uppercase">
+        <thead className={isDarkMode ? 'bg-slate-800 text-slate-400' : 'bg-gray-50 text-gray-400'}>
+          <tr><th className="p-4">User</th><th className="p-4">Role</th><th className="p-4">Zone</th><th className="p-4">Last Active</th></tr>
+        </thead>
+        <tbody className={`divide-y ${isDarkMode ? 'divide-slate-800' : 'divide-slate-100'}`}>
+          {users.map((u: any) => (
+            <tr key={u.uid} className={isDarkMode ? 'hover:bg-slate-800/50' : 'hover:bg-gray-50'}>
+              <td className="p-4">
+                <div className="flex items-center gap-2">
+                  <div className="w-6 h-6 bg-amber-100 rounded flex items-center justify-center text-amber-700 text-[10px] font-black">{u.username[0]}</div>
+                  <div>
+                    <p className={isDarkMode ? 'text-slate-200' : 'text-slate-800'}>{u.username}</p>
+                    <p className="text-[8px] text-gray-400 lowercase font-medium">{u.email}</p>
+                  </div>
+                </div>
+              </td>
+              <td className="p-4">
+                <span className={`px-2 py-0.5 rounded-full text-[8px] font-black ${
+                  u.role === UserRole.SUPER_POLICE ? 'bg-purple-100 text-purple-700' : 
+                  u.role === UserRole.LOCAL_POLICE ? 'bg-blue-100 text-blue-700' : 
+                  'bg-green-100 text-green-700'
+                }`}>
+                  {u.role}
+                </span>
+              </td>
+              <td className="p-4 text-gray-400 font-medium">{u.zone || 'N/A'}</td>
+              <td className="p-4 text-gray-400 font-medium">{u.lastLogin ? new Date(u.lastLogin).toLocaleString() : 'Never'}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {users.length === 0 && <div className="p-10 text-center text-gray-300 font-black uppercase tracking-widest">No Personnel Found</div>}
     </div>
   );
 }
