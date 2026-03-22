@@ -49,6 +49,7 @@ export default function App() {
   const [allHotels, setAllHotels] = useState<HotelProfile[]>(() => JSON.parse(localStorage.getItem('allHotels') || '[]'));
   const [hotelProfile, setHotelProfile] = useState<HotelProfile>(() => JSON.parse(localStorage.getItem('currentHotel') || '{"name":"","address":"","zone":"","receptionistName":"","phoneNumber":""}'));
   const [hasAgreed, setHasAgreed] = useState(false);
+  const [activeAlert, setActiveAlert] = useState<Notification | null>(null);
 
   const t = translations[lang];
 
@@ -120,10 +121,23 @@ export default function App() {
         guestId: guest.id
       };
       setNotifications([notif, ...notifications]);
+      // The alert will be shown to police users via useEffect monitoring notifications
     }
     setNewGuest({ fullName: '', nationality: '', roomNumber: '', idPhoto: '', guestPhone: '', origin: '', purpose: '', duration: '' });
     setView('guestList');
   };
+
+  // Monitor notifications for police alerts
+  useEffect(() => {
+    if (user && (user.role === UserRole.LOCAL_POLICE || user.role === UserRole.SUPER_POLICE)) {
+      const latestDanger = notifications.find(n => n.type === 'danger');
+      if (latestDanger) {
+        // Only show if it's "new" (within last 10 seconds for demo purposes, or track seen alerts)
+        // For this app, we'll show the most recent one if it hasn't been cleared
+        setActiveAlert(latestDanger);
+      }
+    }
+  }, [notifications, user]);
 
   const [newGuest, setNewGuest] = useState({ fullName: '', nationality: '', roomNumber: '', idPhoto: '', guestPhone: '', origin: '', purpose: '', duration: '' });
   const [newWanted, setNewWanted] = useState({ fullName: '', photo: '', description: '', crime: '' });
@@ -251,6 +265,7 @@ export default function App() {
           {(user.role === UserRole.LOCAL_POLICE || user.role === UserRole.SUPER_POLICE) && (
             <>
               <NavItem icon={<Plus size={18}/>} label={t.policeNotice} active={view === 'addWanted'} onClick={() => setView('addWanted')} />
+              <NavItem icon={<AlertTriangle size={18}/>} label={t.wantedPersons} active={view === 'wantedPersons'} onClick={() => setView('wantedPersons')} />
               <NavItem icon={<Users size={18}/>} label={t.guestList} active={view === 'guestList'} onClick={() => setView('guestList')} />
               <NavItem icon={<Building2 size={18}/>} label={t.hotelDirectory} active={view === 'hotelDirectory'} onClick={() => setView('hotelDirectory')} />
               <NavItem icon={<FileBarChart size={18}/>} label={t.reports} active={view === 'reports'} onClick={() => setView('reports')} />
@@ -284,13 +299,41 @@ export default function App() {
         <main className="p-6 max-w-6xl mx-auto">
           {zoomImg && <div className="fixed inset-0 bg-black/80 z-[100] flex items-center justify-center p-4" onClick={() => setZoomImg(null)}><img src={zoomImg} className="max-w-full max-h-full rounded shadow-2xl"/></div>}
           
+          {activeAlert && (user?.role === UserRole.LOCAL_POLICE || user?.role === UserRole.SUPER_POLICE) && (
+            <div className="fixed inset-0 bg-red-600/90 z-[200] flex items-center justify-center p-6 backdrop-blur-md">
+              <div className="bg-white rounded-3xl shadow-[0_0_100px_rgba(255,255,255,0.3)] p-10 w-full max-w-2xl text-center border-8 border-red-500 animate-pulse">
+                <ShieldAlert size={120} className="mx-auto text-red-600 mb-6" />
+                <h2 className="text-4xl font-black text-red-700 uppercase mb-4 tracking-tighter">{t.alertWantedFound}</h2>
+                <div className="bg-red-50 p-8 rounded-2xl border-2 border-red-100 mb-8">
+                  <p className="text-2xl font-black text-slate-800 uppercase mb-2">{activeAlert.message}</p>
+                  <p className="text-sm font-bold text-red-500 uppercase tracking-widest">Immediate Response Required</p>
+                </div>
+                <div className="flex gap-4">
+                  <button 
+                    onClick={() => { setView('guestList'); setActiveAlert(null); }}
+                    className="flex-1 bg-slate-900 text-white font-black py-5 rounded-2xl uppercase tracking-widest text-lg shadow-2xl hover:bg-slate-800 transition-all"
+                  >
+                    Intercept Now
+                  </button>
+                  <button 
+                    onClick={() => setActiveAlert(null)}
+                    className="px-8 bg-white border-2 border-gray-200 text-gray-400 font-bold py-5 rounded-2xl uppercase text-sm hover:bg-gray-50"
+                  >
+                    Dismiss
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+          
           {view === 'setupHotel' && <SetupForm hotelProfile={hotelProfile} setHotelProfile={setHotelProfile} onSubmit={handleSetupSubmit} t={t} handleFileUpload={handleFileUpload} />}
           {view === 'setupPolice' && <div className="max-w-md mx-auto bg-white p-8 rounded-xl shadow-lg border border-gray-100"><h3 className="text-xl font-bold mb-6 uppercase text-slate-800">Assigned Jurisdiction</h3><div className="space-y-4">{ZONES.map(z => <button key={z} onClick={() => { setUser({...user, zone: z}); setView('agreement'); }} className="w-full text-left p-4 bg-gray-50 border rounded-lg font-bold text-gray-600 hover:bg-amber-50 hover:border-amber-500 transition-all">{z}</button>)}</div></div>}
           
           {view === 'dashboard' && <Dashboard user={user} t={t} guests={visibleGuests} notifications={notifications} wanted={wanted} setView={setView} hotelProfile={hotelProfile} />}
-          {view === 'guestList' && <ListView items={visibleGuests} t={t} setZoomImg={setZoomImg} />}
+          {view === 'guestList' && <ListView items={visibleGuests} t={t} setZoomImg={setZoomImg} user={user} />}
           {view === 'registerGuest' && <GuestForm newGuest={newGuest} setNewGuest={setNewGuest} onSubmit={saveGuest} t={t} handleFileUpload={handleFileUpload} />}
           {view === 'addWanted' && <WantedForm wanted={wanted} setWanted={setWanted} t={t} handleFileUpload={handleFileUpload} addWanted={addWanted} newWanted={newWanted} setNewWanted={setNewWanted} />}
+          {view === 'wantedPersons' && <WantedList wanted={wanted} t={t} setZoomImg={setZoomImg} />}
           {view === 'hotelDirectory' && <HotelDir hotels={allHotels} t={t} user={user} />}
           {view === 'utility' && <div className="bg-white p-10 rounded-xl shadow-sm border space-y-6"><h3 className={`text-2xl text-center ${GOLDEN_GRADIENT}`}>{t.appUtility}</h3><p className="text-gray-600 font-bold leading-relaxed">{t.utilityText}</p><p className="text-amber-700 font-black uppercase text-center mt-10">{t.developerCredit}</p></div>}
           {view === 'reports' && <ReportSection t={t} guests={visibleGuests} user={user} hotelProfile={hotelProfile} />}
@@ -347,10 +390,11 @@ function SetupForm({ hotelProfile, setHotelProfile, onSubmit, t, isSettings, han
 
 function Dashboard({ t, guests, notifications, wanted, setView, user, hotelProfile }: any) {
   const stats = [
-    { l: t.guestList, v: guests.length, c: 'bg-indigo-600' },
-    { l: t.wantedPersons, v: wanted.length, c: 'bg-red-600' },
-    { l: t.notifications, v: notifications.length, c: 'bg-amber-600' }
-  ];
+    { l: t.guestList, v: guests.length, c: 'bg-indigo-600', role: [UserRole.RECEPTION, UserRole.LOCAL_POLICE, UserRole.SUPER_POLICE] },
+    { l: t.wantedPersons, v: wanted.length, c: 'bg-red-600', role: [UserRole.LOCAL_POLICE, UserRole.SUPER_POLICE] },
+    { l: t.notifications, v: notifications.length, c: 'bg-amber-600', role: [UserRole.RECEPTION, UserRole.LOCAL_POLICE, UserRole.SUPER_POLICE] }
+  ].filter(s => s.role.includes(user.role));
+
   return (
     <div className="space-y-8">
       {user.role === UserRole.RECEPTION && hotelProfile.name && (
@@ -370,13 +414,81 @@ function Dashboard({ t, guests, notifications, wanted, setView, user, hotelProfi
         </div>
       )}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
-        {stats.map(s => <div key={s.l} className="bg-white p-6 rounded-xl border flex items-center justify-between shadow-sm cursor-pointer" onClick={() => setView(s.l === t.guestList ? 'guestList' : s.l === t.wantedPersons ? 'wantedPersons' : 'notifications')}>
-          <div><p className="text-[10px] font-black text-gray-400 uppercase mb-1">{s.l}</p><p className="text-3xl font-black text-gray-800">{s.v}</p></div>
-          <div className={`${s.c} w-10 h-10 rounded-lg flex items-center justify-center text-white shadow-lg`}><Activity size={18}/></div>
-        </div>)}
+        {stats.map(s => (
+          <div 
+            key={s.l} 
+            className="bg-white p-6 rounded-xl border flex items-center justify-between shadow-sm cursor-pointer hover:border-amber-500 transition-all" 
+            onClick={() => setView(s.l === t.guestList ? 'guestList' : s.l === t.wantedPersons ? 'wantedPersons' : 'notifications')}
+          >
+            <div><p className="text-[10px] font-black text-gray-400 uppercase mb-1">{s.l}</p><p className="text-3xl font-black text-gray-800">{s.v}</p></div>
+            <div className={`${s.c} w-10 h-10 rounded-lg flex items-center justify-center text-white shadow-lg`}><Activity size={18}/></div>
+          </div>
+        ))}
       </div>
-      <div className="bg-white p-6 rounded-xl border h-80 shadow-sm"><ResponsiveContainer width="100%" height="100%"><BarChart data={[{n:'Daily', v:guests.length},{n:'Regional', v:12}]}><XAxis dataKey="n"/><YAxis/><Tooltip/><Bar dataKey="v" fill="#4f46e5" radius={[4,4,0,0]}/></BarChart></ResponsiveContainer></div>
-      <div className="bg-white p-6 rounded-xl border shadow-sm"><h4 className="font-black text-slate-800 uppercase mb-4 text-xs">Recent Regional Activity</h4><div className="overflow-x-auto"><table className="w-full text-left text-[11px] font-bold"><thead className="bg-gray-50 uppercase text-gray-400"><tr><th className="p-3">Guest Name</th><th className="p-3">Property</th><th className="p-3 text-center">Status</th></tr></thead><tbody>{guests.slice(0,5).map((g: any) => <tr key={g.id} className="border-t hover:bg-gray-50"><td className="p-3 uppercase">{g.fullName}</td><td className="p-3 uppercase text-gray-500">{g.hotelName}</td><td className="p-3 text-center">{g.isWanted ? <span className="text-red-600">Wanted</span> : <span className="text-emerald-600">Clear</span>}</td></tr>)}</tbody></table></div></div>
+      {(user.role === UserRole.LOCAL_POLICE || user.role === UserRole.SUPER_POLICE) && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="bg-white p-6 rounded-xl border h-80 shadow-sm">
+            <h4 className="font-black text-slate-400 uppercase mb-4 text-[10px]">Regional Traffic Analysis</h4>
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={[{n:'Daily', v:guests.length},{n:'Regional', v:12}]}>
+                <XAxis dataKey="n"/><YAxis/><Tooltip/><Bar dataKey="v" fill="#4f46e5" radius={[4,4,0,0]}/>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+          <div className="bg-slate-900 p-6 rounded-xl border border-slate-800 h-80 shadow-xl overflow-hidden flex flex-col">
+             <div className="flex justify-between items-center mb-4">
+                <h4 className="font-black text-amber-500 uppercase text-[10px] flex items-center gap-2">
+                   <Activity size={14} className="animate-pulse"/> Live Regional Monitoring
+                </h4>
+                <span className="text-[8px] text-slate-500 font-bold uppercase">Updates every 5s</span>
+             </div>
+             <div className="flex-1 space-y-3 overflow-y-auto pr-2 custom-scrollbar">
+                {guests.slice(0, 10).map((g: any) => (
+                  <div key={g.id} className="p-3 bg-slate-800/50 border border-slate-700 rounded-lg flex items-center justify-between group hover:bg-slate-800 transition-all">
+                    <div className="flex items-center gap-3">
+                       <div className="w-8 h-8 rounded bg-slate-700 flex items-center justify-center text-[10px] font-black text-slate-400">{g.fullName[0]}</div>
+                       <div>
+                          <p className="text-[10px] font-black text-slate-200 uppercase leading-none mb-1">{g.fullName}</p>
+                          <p className="text-[8px] text-slate-500 font-bold uppercase">{g.hotelName} • Room {g.roomNumber}</p>
+                       </div>
+                    </div>
+                    <div className="text-right">
+                       <p className="text-[8px] text-slate-500 font-bold uppercase">{g.checkInDate}</p>
+                       {g.isWanted && <span className="text-[7px] bg-red-500 text-white px-1 rounded font-black uppercase animate-pulse">Wanted</span>}
+                    </div>
+                  </div>
+                ))}
+             </div>
+          </div>
+        </div>
+      )}
+      <div className="bg-white p-6 rounded-xl border shadow-sm">
+        <h4 className="font-black text-slate-800 uppercase mb-4 text-xs">Recent Activity</h4>
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-[11px] font-bold">
+            <thead className="bg-gray-50 uppercase text-gray-400">
+              <tr>
+                <th className="p-3">Guest Name</th>
+                <th className="p-3">Property</th>
+                {(user.role === UserRole.LOCAL_POLICE || user.role === UserRole.SUPER_POLICE) && <th className="p-3 text-center">Status</th>}
+              </tr>
+            </thead>
+            <tbody>
+              {guests.slice(0,5).map((g: any) => (
+                <tr key={g.id} className="border-t hover:bg-gray-50">
+                  <td className="p-3 uppercase">{g.fullName}</td>
+                  <td className="p-3 uppercase text-gray-500">{g.hotelName}</td>
+                  {(user.role === UserRole.LOCAL_POLICE || user.role === UserRole.SUPER_POLICE) && (
+                    <td className="p-3 text-center">
+                      {g.isWanted ? <span className="text-red-600">Wanted</span> : <span className="text-emerald-600">Clear</span>}
+                    </td>
+                  )}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
   );
 }
@@ -390,7 +502,9 @@ function Input({ label, value, onChange, type = "text", required }: any) {
   );
 }
 
-function ListView({ items, t, setZoomImg }: any) {
+function ListView({ items, t, setZoomImg, user }: any) {
+  const [selectedGuest, setSelectedGuest] = useState<any>(null);
+
   return (
     <div className="bg-white rounded-xl shadow border overflow-hidden">
       <div className="overflow-x-auto">
@@ -404,7 +518,8 @@ function ListView({ items, t, setZoomImg }: any) {
               <th className="px-6 py-4">{t.origin} / {t.purpose}</th>
               <th className="px-6 py-4">{t.duration}</th>
               <th className="px-6 py-4">Property Data</th>
-              <th className="px-6 py-4">Status</th>
+              {(user.role === UserRole.LOCAL_POLICE || user.role === UserRole.SUPER_POLICE) && <th className="px-6 py-4">Status</th>}
+              <th className="px-6 py-4 text-center">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y text-xs font-bold uppercase text-gray-700">
@@ -418,15 +533,90 @@ function ListView({ items, t, setZoomImg }: any) {
                 <td className="px-6 py-3">{g.duration}</td>
                 <td className="px-6 py-3 leading-tight">
                   {g.hotelName}<br/>
-                  <span className="text-[9px] text-gray-400">{g.hotelZone}</span><br/>
-                  <span className="text-[8px] text-indigo-500">{g.receptionistName} ({g.receptionistPhone})</span>
+                  <span className="text-[9px] text-gray-400">{g.hotelZone}</span>
                 </td>
-                <td className="px-6 py-3">{g.isWanted ? <span className="text-red-600 animate-pulse">Wanted</span> : <span className="text-emerald-600">Clear</span>}</td>
+                {(user.role === UserRole.LOCAL_POLICE || user.role === UserRole.SUPER_POLICE) && (
+                  <td className="px-6 py-3">
+                    {g.isWanted ? <span className="text-red-600 animate-pulse">Wanted</span> : <span className="text-emerald-600">Clear</span>}
+                  </td>
+                )}
+                <td className="px-6 py-3 text-center">
+                  <button 
+                    onClick={() => setSelectedGuest(g)}
+                    className="p-2 bg-slate-100 text-slate-600 rounded hover:bg-amber-500 hover:text-white transition-all"
+                  >
+                    <Maximize2 size={14}/>
+                  </button>
+                </td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
+
+      {selectedGuest && (
+        <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col">
+            <div className="p-6 border-b flex justify-between items-center bg-slate-50">
+              <h3 className="text-lg font-black text-slate-800 uppercase tracking-widest">Guest Details</h3>
+              <button onClick={() => setSelectedGuest(null)} className="text-gray-400 hover:text-red-500 transition-colors"><X size={24}/></button>
+            </div>
+            <div className="p-8 flex flex-col md:flex-row gap-8 overflow-y-auto">
+              <div className="w-full md:w-1/3">
+                <img 
+                  src={selectedGuest.idPhoto} 
+                  className="w-full aspect-[3/4] object-cover rounded-xl shadow-lg cursor-zoom-in border-4 border-white" 
+                  onClick={() => setZoomImg(selectedGuest.idPhoto)}
+                />
+                <p className="text-[10px] text-center mt-2 font-bold text-gray-400 uppercase">Click to Enlarge ID</p>
+              </div>
+              <div className="flex-1 space-y-6">
+                <div className="grid grid-cols-2 gap-6">
+                  <DetailItem label={t.fullName} value={selectedGuest.fullName} />
+                  <DetailItem label={t.guestPhone} value={selectedGuest.guestPhone} />
+                  <DetailItem label={t.nationality} value={selectedGuest.nationality} />
+                  <DetailItem label={t.roomNumber} value={selectedGuest.roomNumber} />
+                  <DetailItem label={t.origin} value={selectedGuest.origin} />
+                  <DetailItem label={t.purpose} value={selectedGuest.purpose} />
+                  <DetailItem label={t.duration} value={selectedGuest.duration} />
+                  <DetailItem label={t.date} value={selectedGuest.checkInDate} />
+                </div>
+                <div className="p-4 bg-slate-50 rounded-xl border border-slate-100">
+                  <h5 className="text-[10px] font-black text-slate-400 uppercase mb-2">Property Information</h5>
+                  <div className="grid grid-cols-2 gap-4">
+                    <DetailItem label={t.hotel} value={selectedGuest.hotelName} />
+                    <DetailItem label={t.zone} value={selectedGuest.hotelZone} />
+                    <DetailItem label={t.receptionistName} value={selectedGuest.receptionistName} />
+                    <DetailItem label={t.phoneNumber} value={selectedGuest.receptionistPhone} />
+                  </div>
+                </div>
+                {(user.role === UserRole.LOCAL_POLICE || user.role === UserRole.SUPER_POLICE) && selectedGuest.isWanted && (
+                  <div className="p-4 bg-red-50 border border-red-200 rounded-xl flex items-center gap-4 text-red-600">
+                    <ShieldAlert size={32} className="animate-bounce" />
+                    <div>
+                      <p className="text-xs font-black uppercase">Wanted Person Detected</p>
+                      <p className="text-[10px] font-bold">Immediate action required. Contact regional HQ.</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+            <div className="p-6 border-t bg-slate-50 flex justify-end gap-4 no-print">
+              <button onClick={() => window.print()} className="px-6 py-2 bg-white border text-slate-600 rounded-lg text-[10px] font-black uppercase flex items-center gap-2 hover:bg-gray-50"><Printer size={14}/> {t.print}</button>
+              <button onClick={() => setSelectedGuest(null)} className="px-6 py-2 bg-slate-900 text-white rounded-lg text-[10px] font-black uppercase">{t.cancel}</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function DetailItem({ label, value }: any) {
+  return (
+    <div>
+      <p className="text-[9px] font-black text-gray-400 uppercase mb-1">{label}</p>
+      <p className="text-xs font-bold text-slate-800 uppercase">{value || 'N/A'}</p>
     </div>
   );
 }
@@ -470,6 +660,36 @@ function WantedForm({ addWanted, newWanted, setNewWanted, t, handleFileUpload }:
       {newWanted.photo && <img src={newWanted.photo} className="w-20 h-24 mx-auto object-cover rounded shadow border-2 border-red-200" />}
       <button className="w-full bg-red-600 text-white font-black py-3 rounded-lg uppercase text-sm mt-4 shadow-xl">Publish Bulletin</button>
     </form>
+  );
+}
+
+function WantedList({ wanted, t, setZoomImg }: any) {
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+      {wanted.map((w: any) => (
+        <div key={w.id} className="bg-white rounded-xl shadow-sm border overflow-hidden group hover:border-red-500 transition-all">
+          <div className="aspect-square relative overflow-hidden">
+            <img src={w.photo} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent flex items-end p-4">
+               <div>
+                  <p className="text-white font-black uppercase text-sm">{w.fullName}</p>
+                  <p className="text-red-400 text-[10px] font-bold uppercase">{w.crime}</p>
+               </div>
+            </div>
+            <button 
+              onClick={() => setZoomImg(w.photo)}
+              className="absolute top-2 right-2 p-2 bg-white/20 backdrop-blur-md text-white rounded-lg opacity-0 group-hover:opacity-100 transition-opacity"
+            >
+              <Maximize2 size={16}/>
+            </button>
+          </div>
+          <div className="p-4 space-y-2">
+            <p className="text-[10px] text-gray-500 font-bold leading-relaxed">{w.description}</p>
+            <p className="text-[8px] text-gray-400 font-black uppercase">Posted: {w.postedDate}</p>
+          </div>
+        </div>
+      ))}
+    </div>
   );
 }
 
