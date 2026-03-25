@@ -5,11 +5,30 @@ import {
   Users, UserPlus, AlertTriangle, FileText, LogOut, Bell, Camera, Image as ImageIcon, Download, 
   Printer, Globe, Plus, Settings, Edit, X, Maximize2, CheckCircle2, ShieldCheck, Search, MapPin, 
   Building2, FileBarChart, Menu, Info, ChevronRight, ShieldAlert, History, TrendingUp, Activity, 
-  Phone, Fingerprint, Map
+  Phone, Fingerprint, Map, Moon, Sun, ChevronDown, ArrowRight, AlertCircle, Clock, User as UserIcon
 } from 'lucide-react';
 import { 
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend,
+  LineChart, Line, AreaChart, Area
 } from 'recharts';
+import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
+import L from 'leaflet';
+
+// Fix for default marker icons in Leaflet
+import markerIcon from 'leaflet/dist/images/marker-icon.png';
+import markerIconRetina from 'leaflet/dist/images/marker-icon-2x.png';
+import markerShadow from 'leaflet/dist/images/marker-shadow.png';
+
+const DefaultIcon = L.icon({
+    iconUrl: markerIcon,
+    iconRetinaUrl: markerIconRetina,
+    shadowUrl: markerShadow,
+    iconSize: [25, 41],
+    iconAnchor: [12, 41],
+    popupAnchor: [1, -34],
+    shadowSize: [41, 41]
+});
+L.Marker.prototype.options.icon = DefaultIcon;
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
@@ -98,20 +117,32 @@ function AppContent() {
   const [wanted, setWanted] = useState<WantedPerson[]>([]);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [view, setView] = useState<string>('dashboard');
-  const [loginData, setLoginData] = useState({ username: '', password: '' });
+  const [loginData, setLoginData] = useState({ username: '', password: '', role: UserRole.RECEPTION });
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [zoomImg, setZoomImg] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
   
   const [allHotels, setAllHotels] = useState<HotelProfile[]>([]);
   const [hotelProfile, setHotelProfile] = useState<HotelProfile>({id:"",name:"",address:"",zone:"",receptionistName:"",phoneNumber:""});
-  const [hasAgreed, setHasAgreed] = useState(false);
+  const [hasAgreed, setHasAgreed] = useState(localStorage.getItem('begu_engeda_agreed') === 'true');
   const [activeAlert, setActiveAlert] = useState<Notification | null>(null);
   const [activePoliceZone, setActivePoliceZone] = useState<string>('All');
   const [isAuthReady, setIsAuthReady] = useState(false);
   const [allUsers, setAllUsers] = useState<any[]>([]);
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [syncStatus, setSyncStatus] = useState<'connected' | 'reconnecting' | 'error'>('connected');
+  const [selectedHotelOnMap, setSelectedHotelOnMap] = useState<any>(null);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
+
+  const showToast = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 5000);
+  };
+
+  // Shared Account Session Context
+  const [currentHotelId, setCurrentHotelId] = useState<string | null>(localStorage.getItem('begu_engeda_hotel_id'));
+  const [currentPoliceZone, setCurrentPoliceZone] = useState<string | null>(localStorage.getItem('begu_engeda_police_zone'));
 
   useEffect(() => {
     if (!user) return;
@@ -173,10 +204,17 @@ function AppContent() {
   useEffect(() => {
     async function testConnection() {
       try {
-        await getDocFromServer(doc(db, 'test', 'connection'));
-      } catch (error) {
-        if(error instanceof Error && error.message.includes('the client is offline')) {
-          console.error("Please check your Firebase configuration.");
+        // system_health is publicly readable in rules, so this should succeed if online
+        await getDocFromServer(doc(db, 'system_health', 'status'));
+        console.log("Firestore connectivity verified.");
+      } catch (error: any) {
+        if (error.code === 'permission-denied') {
+          console.log("Firestore reached (Security rules active).");
+        } else {
+          console.warn("Firestore connectivity check:", error.message);
+          if(error.message.includes('offline') || error.message.includes('failed-precondition')) {
+            console.error("Firestore is offline or configuration is invalid.");
+          }
         }
       }
     }
@@ -200,20 +238,36 @@ function AppContent() {
             });
             
             // Redirect to setup if missing critical info
-            if (userData.role === UserRole.LOCAL_POLICE && !userData.zone) {
-              setView('setupPolice');
+            if (userData.role === UserRole.LOCAL_POLICE) {
+              if (firebaseUser.email?.endsWith('@shared.com')) {
+                const zone = localStorage.getItem('begu_engeda_police_zone');
+                if (!zone) setView('setupPolice');
+              } else if (!userData.zone) {
+                setView('setupPolice');
+              }
             } else if (userData.role === UserRole.RECEPTION) {
-              // Check if hotel exists
-              const hotelDoc = await getDocFromServer(doc(db, 'hotels', firebaseUser.uid));
-              if (!hotelDoc.exists()) setView('setupHotel');
+              if (firebaseUser.email?.endsWith('@shared.com')) {
+                const hId = localStorage.getItem('begu_engeda_hotel_id');
+                if (!hId) setView('setupHotel');
+              } else {
+                const hotelDoc = await getDocFromServer(doc(db, 'hotels', firebaseUser.uid));
+                if (!hotelDoc.exists()) setView('setupHotel');
+              }
             }
           } else {
-            let role: UserRole = UserRole.RECEPTION;
+            const pendingRole = localStorage.getItem('pendingRole') as UserRole | null;
+            let role: UserRole = pendingRole || UserRole.RECEPTION;
             let username = firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'User';
             
-            if (firebaseUser.email === 'tinsaebiniyam905@gmail.com') {
+            if (firebaseUser.email === 'tinsaebiniyam905@gmail.com' || firebaseUser.email === 'admin@begu-engeda.com' || firebaseUser.email === 'admin@shared.com') {
               role = UserRole.SUPER_POLICE;
               username = 'Police Commission';
+            } else if (firebaseUser.email === 'reception@shared.com') {
+              role = UserRole.RECEPTION;
+              username = 'Receptionist';
+            } else if (firebaseUser.email === 'police@shared.com') {
+              role = UserRole.LOCAL_POLICE;
+              username = 'Local Police';
             }
 
             const newUser = { 
@@ -227,8 +281,10 @@ function AppContent() {
             await setDoc(doc(db, 'users', firebaseUser.uid), newUser);
             setUser({ ...newUser, email: newUser.email || undefined });
             
+            localStorage.removeItem('pendingRole');
+
             if (role === UserRole.RECEPTION) setView('setupHotel');
-            else if (role === (UserRole.LOCAL_POLICE as any)) setView('setupPolice');
+            else if (role === UserRole.LOCAL_POLICE) setView('setupPolice');
           }
         } catch (error) {
           console.error("Error fetching user data:", error);
@@ -279,7 +335,8 @@ function AppContent() {
       setAllHotels(data);
       
       if (user.role === UserRole.RECEPTION) {
-        const myHotel = data.find(h => h.id === user.uid);
+        const myHotelId = user.email?.endsWith('@shared.com') ? localStorage.getItem('begu_engeda_hotel_id') : user.uid;
+        const myHotel = data.find(h => h.id === myHotelId);
         if (myHotel) setHotelProfile(myHotel);
       }
       setSyncStatus('connected');
@@ -298,17 +355,25 @@ function AppContent() {
 
   const handleGoogleLogin = async () => {
     const provider = new GoogleAuthProvider();
+    setIsLoading(true);
+    localStorage.setItem('pendingRole', loginData.role);
     try {
       const result = await signInWithPopup(auth, provider);
       // Auth listener will handle the rest
       setView('dashboard');
-    } catch (error: any) {
+      } catch (error: any) {
       console.error("Login failed:", error);
       if (error.code === 'auth/popup-blocked') {
         alert('The login popup was blocked by your browser. Please allow popups for this site and try again. / የመግቢያ መስኮቱ በብሮውዘርዎ ተዘግቷል። እባክዎ ለዚህ ሳይት ፖፕ-አፕ ይፍቀዱ እና እንደገና ይሞክሩ።');
+      } else if (error.code === 'auth/operation-not-allowed') {
+        alert('Login method not enabled. Please enable "Email/Password" and "Google" in your Firebase Console: https://console.firebase.google.com/project/gen-lang-client-0183085526/authentication/providers');
+      } else if (error.code === 'auth/cancelled-popup-request') {
+        console.log("Popup request cancelled by user or another request.");
       } else {
         alert('Login failed / መግባት አልተቻለም: ' + error.message);
       }
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -319,31 +384,71 @@ function AppContent() {
       return;
     }
 
+    setIsLoading(true);
+    
+    // Hardcoded credentials mapping
+    let email = '';
+    const username = loginData.username.toLowerCase().trim();
+    const password = loginData.password;
+    let targetRole = loginData.role;
+
+    if (username === 'police' && password === 'police1234') {
+      email = 'admin@shared.com';
+      targetRole = UserRole.SUPER_POLICE;
+    } else if (username === 'reception' && password === '1234') {
+      email = 'reception@shared.com';
+      targetRole = UserRole.RECEPTION;
+    } else if (username === 'police' && password === '1234@') {
+      email = 'police@shared.com';
+      targetRole = UserRole.LOCAL_POLICE;
+    } else {
+      // Fallback to standard email/password or append domain
+      email = username.includes('@') ? username : `${username}@begu-engeda.com`;
+    }
+
+    localStorage.setItem('pendingRole', targetRole);
+    
     try {
-      // If it looks like an email, use it directly. Otherwise, append a dummy domain for the auth provider.
-      const email = loginData.username.includes('@') ? loginData.username : `${loginData.username}@begu-engeda.com`;
-      await signInWithEmailAndPassword(auth, email, loginData.password);
-      setView('dashboard');
+      await signInWithEmailAndPassword(auth, email, password);
+      // View will be updated by onAuthStateChanged
     } catch (error: any) {
       console.error("Login failed:", error);
-      if (error.code === 'auth/user-not-found') {
-        // For this specific app, we might want to allow auto-registration if it's a new user
-        // but let's first try to be helpful.
-        if (window.confirm('User not found. Would you like to create a new account with these credentials? / ተጠቃሚው አልተገኘም። በእነዚህ መረጃዎች አዲስ መለያ መፍጠር ይፈልጋሉ?')) {
+      if (error.code === 'auth/user-not-found' || error.code === 'auth/invalid-credential') {
+        // Auto-create shared accounts if they don't exist
+        if (email.endsWith('@shared.com')) {
           try {
-            const email = loginData.username.includes('@') ? loginData.username : `${loginData.username}@begu-engeda.com`;
-            await createUserWithEmailAndPassword(auth, email, loginData.password);
-            setView('dashboard');
+            await createUserWithEmailAndPassword(auth, email, password);
+            return;
           } catch (regError: any) {
-            alert('Registration failed: ' + regError.message);
+            if (regError.code === 'auth/email-already-in-use') {
+              showToast('Incorrect password for shared account / የተሳሳተ የይለፍ ቃል', 'error');
+            } else {
+              console.error("Shared account creation failed:", regError);
+              showToast('Account creation failed / መለያ መፍጠር አልተቻለም', 'error');
+            }
           }
+        } else {
+          showToast('User not found or incorrect credentials / ተጠቃሚው አልተገኘም ወይም የተሳሳተ መረጃ', 'error');
         }
       } else if (error.code === 'auth/wrong-password') {
-        alert('Incorrect password / የተሳሳተ የይለፍ ቃል');
+        showToast('Incorrect password / የተሳሳተ የይለፍ ቃል', 'error');
+      } else if (error.code === 'auth/operation-not-allowed') {
+        showToast('CRITICAL: Email/Password login is not enabled in your Firebase Console. Please enable it at: https://console.firebase.google.com/project/gen-lang-client-0183085526/authentication/providers', 'error');
       } else {
-        alert('Login failed / መግባት አልተቻለም: ' + error.message);
+        showToast('Login failed / መግባት አልተቻለም: ' + error.message, 'error');
       }
+    } finally {
+      setIsLoading(false);
     }
+  };
+
+  const handleDemoLogin = (username: string, pass: string, role: UserRole) => {
+    setLoginData({ username, password: pass, role });
+    // We'll trigger the login in a small timeout to ensure state is updated
+    setTimeout(() => {
+      const form = document.querySelector('form');
+      if (form) form.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }));
+    }, 100);
   };
 
   const handleLogout = async () => { 
@@ -352,16 +457,23 @@ function AppContent() {
     setView('dashboard'); 
     setIsSidebarOpen(false); 
     setHasAgreed(false);
+    // Note: We don't clear session context from localStorage on logout 
+    // to allow the device to remember its hotel/zone if it's a shared terminal.
   };
 
   const handleSetupSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (hotelProfile.name && hotelProfile.zone && user) {
-      const hotelId = user.uid;
+      // For shared accounts, we use a random ID for the hotel so multiple hotels can share one login
+      const hotelId = user.email?.endsWith('@shared.com') ? Math.random().toString(36).substr(2, 9) : user.uid;
       const updatedProfile = { ...hotelProfile, id: hotelId };
       try {
         await setDoc(doc(db, 'hotels', hotelId), updatedProfile);
         setHotelProfile(updatedProfile);
+        if (user.email?.endsWith('@shared.com')) {
+          localStorage.setItem('begu_engeda_hotel_id', hotelId);
+          setCurrentHotelId(hotelId);
+        }
         setView('agreement');
       } catch (error) {
         handleFirestoreError(error, OperationType.WRITE, `hotels/${hotelId}`);
@@ -378,7 +490,7 @@ function AppContent() {
     const guest: Guest = {
       ...newGuest,
       id: guestId,
-      hotelId: hotelProfile.id || user.uid,
+      hotelId: hotelProfile.id || currentHotelId || user.uid,
       hotelName: hotelProfile.name,
       hotelAddress: hotelProfile.address,
       hotelZone: hotelProfile.zone,
@@ -463,14 +575,16 @@ function AppContent() {
       if (activePoliceZone !== 'All') {
         filtered = guests.filter(g => g.hotelZone === activePoliceZone);
       }
-    } else if (user?.role === UserRole.LOCAL_POLICE && user.zone) {
-      filtered = guests.filter(g => g.hotelZone === user.zone);
-    } else if (user?.role === UserRole.RECEPTION && hotelProfile.id) {
-      filtered = guests.filter(g => g.hotelId === hotelProfile.id);
+    } else if (user?.role === UserRole.LOCAL_POLICE) {
+      const zone = currentPoliceZone || user.zone;
+      if (zone) filtered = guests.filter(g => g.hotelZone === zone);
+    } else if (user?.role === UserRole.RECEPTION) {
+      const hId = currentHotelId || hotelProfile.id || user.uid;
+      if (hId) filtered = guests.filter(g => g.hotelId === hId);
     }
     
     return filtered.filter(g => g.fullName.toLowerCase().includes(searchTerm.toLowerCase()));
-  }, [guests, searchTerm, user, hotelProfile, activePoliceZone]);
+  }, [guests, searchTerm, user, hotelProfile, activePoliceZone, currentHotelId, currentPoliceZone]);
 
   const filteredNotifs = useMemo(() => {
     let filtered = notifications;
@@ -478,120 +592,174 @@ function AppContent() {
       if (activePoliceZone !== 'All') {
         filtered = notifications.filter(n => n.targetZone === activePoliceZone);
       }
-    } else if (user?.role === UserRole.LOCAL_POLICE && user.zone) {
-      filtered = notifications.filter(n => n.targetZone === user.zone);
-    } else if (user?.role === UserRole.RECEPTION && hotelProfile.zone) {
-      filtered = notifications.filter(n => n.targetZone === hotelProfile.zone);
+    } else if (user?.role === UserRole.LOCAL_POLICE) {
+      const zone = currentPoliceZone || user.zone;
+      if (zone) filtered = notifications.filter(n => n.targetZone === zone);
+    } else if (user?.role === UserRole.RECEPTION) {
+      const zone = hotelProfile.zone;
+      if (zone) filtered = notifications.filter(n => n.targetZone === zone);
     }
     return filtered;
-  }, [notifications, user, hotelProfile, activePoliceZone]);
+  }, [notifications, user, hotelProfile, activePoliceZone, currentPoliceZone]);
 
   if (!user && view !== 'utility') {
     return (
-      <div className="min-h-screen bg-slate-950 flex items-center justify-center p-6 relative overflow-hidden">
-        {/* Decorative background elements */}
-        <div className="absolute top-0 left-0 w-full h-full opacity-20 pointer-events-none">
-          <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] bg-amber-500 rounded-full blur-[150px] animate-pulse"></div>
-          <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-blue-600 rounded-full blur-[150px] animate-pulse" style={{ animationDelay: '2s' }}></div>
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center p-6 relative overflow-hidden font-sans">
+        {/* Immersive background with subtle motion */}
+        <div className="absolute inset-0 overflow-hidden pointer-events-none">
+          <div className="absolute top-[-20%] left-[-10%] w-[70%] h-[70%] bg-indigo-900/20 rounded-full blur-[120px] animate-pulse"></div>
+          <div className="absolute bottom-[-20%] right-[-10%] w-[70%] h-[70%] bg-amber-900/10 rounded-full blur-[120px] animate-pulse" style={{ animationDelay: '3s' }}></div>
+          <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')] opacity-[0.03]"></div>
         </div>
 
-        <div className="bg-white/95 backdrop-blur-xl rounded-[2.5rem] shadow-[0_30px_100px_rgba(0,0,0,0.5)] p-12 w-full max-w-md relative z-10 border border-white/40 overflow-hidden">
-          {/* Top Decoration */}
-          <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-amber-600 via-yellow-400 to-amber-700"></div>
-          
-          <div className="text-center mb-10">
-            <div className="relative inline-block mb-8 group">
-              <div className="absolute inset-0 bg-amber-500 blur-3xl opacity-30 rounded-full group-hover:opacity-50 transition-opacity"></div>
-              <div className="relative z-10 p-1.5 bg-gradient-to-tr from-amber-600 to-yellow-400 rounded-full shadow-2xl transform transition-transform group-hover:scale-105">
-                <img 
-                  src={LOGO_PATH} 
-                  className="w-28 h-28 mx-auto rounded-full border-4 border-white bg-white object-contain" 
-                  alt="Logo"
-                />
+        <div className="w-full max-w-[500px] bg-white rounded-[2.5rem] shadow-[0_50px_100px_-20px_rgba(0,0,0,0.5)] overflow-hidden relative z-10 border border-white/10">
+          {toast && (
+            <div className={`absolute top-0 left-0 right-0 p-4 text-white text-center text-xs font-black uppercase tracking-widest z-50 animate-in fade-in slide-in-from-top-4 duration-300 ${toast.type === 'error' ? 'bg-red-600' : toast.type === 'success' ? 'bg-green-600' : 'bg-indigo-600'}`}>
+              {toast.message}
+            </div>
+          )}
+          <div className="p-10 md:p-12 flex flex-col items-center bg-white">
+            {/* Logo and Title */}
+            <div className="flex flex-col items-center mb-10">
+              <div className="p-4 bg-slate-50 rounded-3xl mb-4 shadow-inner border border-slate-100">
+                <img src={LOGO_PATH} className="w-20 h-20 object-contain" alt="Logo" />
+              </div>
+              <h1 className={`text-4xl font-black tracking-tighter text-center ${GOLDEN_GRADIENT}`}>{t.appName}</h1>
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] mt-2">{t.policeCommission}</p>
+            </div>
+
+            {/* Login Form */}
+            <form onSubmit={handleLogin} className="w-full space-y-6">
+              <div className="space-y-2">
+                <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">{t.username}</label>
+                <div className="relative group">
+                  <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-indigo-600 transition-colors">
+                    <Users size={18} />
+                  </div>
+                  <input 
+                    type="text" 
+                    placeholder="Enter username" 
+                    className="w-full bg-slate-50 border border-slate-200 rounded-2xl pl-12 pr-5 py-4 outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 font-bold transition-all text-sm focus:bg-white disabled:opacity-50" 
+                    value={loginData.username} 
+                    onChange={e => setLoginData({...loginData, username: e.target.value})} 
+                    required 
+                    disabled={isLoading}
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">{t.password}</label>
+                <div className="relative group">
+                  <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-indigo-600 transition-colors">
+                    <Fingerprint size={18} />
+                  </div>
+                  <input 
+                    type="password" 
+                    placeholder="••••••••" 
+                    className="w-full bg-slate-50 border border-slate-200 rounded-2xl pl-12 pr-5 py-4 outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 font-bold transition-all text-sm focus:bg-white disabled:opacity-50" 
+                    value={loginData.password} 
+                    onChange={e => setLoginData({...loginData, password: e.target.value})} 
+                    required 
+                    disabled={isLoading}
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Account Type / የመለያ አይነት</label>
+                <div className="flex gap-3">
+                  <button 
+                    type="button"
+                    onClick={() => setLoginData({...loginData, role: UserRole.RECEPTION})}
+                    className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all border-2 ${loginData.role === UserRole.RECEPTION ? 'bg-indigo-600 border-indigo-600 text-white shadow-lg shadow-indigo-200' : 'bg-slate-50 border-slate-100 text-slate-400 hover:border-slate-200'}`}
+                  >
+                    Reception / ሪሰፕሽን
+                  </button>
+                  <button 
+                    type="button"
+                    onClick={() => setLoginData({...loginData, role: UserRole.LOCAL_POLICE})}
+                    className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all border-2 ${loginData.role === UserRole.LOCAL_POLICE ? 'bg-indigo-600 border-indigo-600 text-white shadow-lg shadow-indigo-200' : 'bg-slate-50 border-slate-100 text-slate-400 hover:border-slate-200'}`}
+                  >
+                    Police / ፖሊስ
+                  </button>
+                </div>
+              </div>
+
+              <button 
+                type="submit"
+                disabled={isLoading}
+                className="w-full bg-slate-900 hover:bg-slate-800 disabled:bg-slate-400 text-white font-black py-5 rounded-2xl transition-all shadow-xl shadow-slate-900/20 uppercase tracking-widest text-xs flex items-center justify-center gap-3 active:scale-[0.98]"
+              >
+                {isLoading ? (
+                  <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                ) : (
+                  <>
+                    <ShieldCheck size={18} className="text-amber-500" />
+                    {t.login}
+                  </>
+                )}
+              </button>
+
+              <div className="relative py-4">
+                <div className="absolute inset-0 flex items-center">
+                  <div className="w-full border-t border-slate-100"></div>
+                </div>
+                <div className="relative flex justify-center text-[10px] uppercase font-black tracking-widest">
+                  <span className="bg-white px-4 text-slate-400">Or / ወይም</span>
+                </div>
+              </div>
+
+              <button 
+                type="button"
+                onClick={handleGoogleLogin}
+                disabled={isLoading}
+                className="w-full bg-white hover:bg-slate-50 border-2 border-slate-100 text-slate-700 font-black py-4 rounded-2xl transition-all flex items-center justify-center gap-3 active:scale-[0.98] text-xs uppercase tracking-widest"
+              >
+                <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" className="w-5 h-5" alt="Google" />
+                Login with Google / በጎግል ይግቡ
+              </button>
+            </form>
+
+            <div className="mt-8 w-full p-6 bg-slate-50 rounded-2xl border border-slate-100">
+              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-4 text-center">Shared Credentials / የጋራ መግቢያ</p>
+              <div className="grid grid-cols-1 gap-3">
+                <button 
+                  type="button"
+                  onClick={() => handleDemoLogin('police', 'police1234', UserRole.SUPER_POLICE)}
+                  className="p-3 bg-white border border-slate-200 rounded-xl text-[9px] font-black uppercase hover:border-indigo-500 transition-all text-slate-600 flex justify-between items-center"
+                >
+                  <span>Admin (Super Police)</span>
+                  <span className="text-amber-600">police / police1234</span>
+                </button>
+                <button 
+                  type="button"
+                  onClick={() => handleDemoLogin('police', '1234@', UserRole.LOCAL_POLICE)}
+                  className="p-3 bg-white border border-slate-200 rounded-xl text-[9px] font-black uppercase hover:border-indigo-500 transition-all text-slate-600 flex justify-between items-center"
+                >
+                  <span>Local Police</span>
+                  <span className="text-amber-600">police / 1234@</span>
+                </button>
+                <button 
+                  type="button"
+                  onClick={() => handleDemoLogin('reception', '1234', UserRole.RECEPTION)}
+                  className="p-3 bg-white border border-slate-200 rounded-xl text-[9px] font-black uppercase hover:border-indigo-500 transition-all text-slate-600 flex justify-between items-center"
+                >
+                  <span>Reception</span>
+                  <span className="text-amber-600">reception / 1234</span>
+                </button>
               </div>
             </div>
-            
-            <h1 className={`text-4xl font-black mb-3 tracking-tighter drop-shadow-md ${GOLDEN_GRADIENT}`}>{t.appName}</h1>
-            
-            <div className="space-y-1.5 mb-8">
-              <p className="text-[11px] font-black text-slate-900 uppercase tracking-[0.2em]">{translations.am.policeCommission}</p>
-              <p className="text-[9px] font-bold text-slate-500 uppercase tracking-[0.15em]">{translations.en.policeCommission}</p>
-            </div>
-          </div>
 
-          <form onSubmit={handleLogin} className="space-y-5">
-            <div className="relative group">
-              <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-amber-600 transition-colors">
-                <Users size={18} />
-              </div>
-              <input 
-                type="text" 
-                placeholder={t.username} 
-                className="w-full bg-slate-50 border border-slate-200 rounded-2xl pl-12 pr-5 py-4 outline-none focus:ring-2 focus:ring-amber-500 font-bold transition-all text-sm focus:bg-white" 
-                value={loginData.username} 
-                onChange={e => setLoginData({...loginData, username: e.target.value})} 
-                required 
-              />
+            <div className="mt-10 flex justify-center gap-3">
+              <button onClick={() => handleLangChange('am')} className={`px-5 py-2 rounded-full text-[10px] font-black transition-all ${lang === 'am' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-200' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}>አማርኛ</button>
+              <button onClick={() => handleLangChange('en')} className={`px-5 py-2 rounded-full text-[10px] font-black transition-all ${lang === 'en' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-200' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}>ENGLISH</button>
             </div>
-            <div className="relative group">
-              <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-amber-600 transition-colors">
-                <Fingerprint size={18} />
-              </div>
-              <input 
-                type="password" 
-                placeholder={t.password} 
-                className="w-full bg-slate-50 border border-slate-200 rounded-2xl pl-12 pr-5 py-4 outline-none focus:ring-2 focus:ring-amber-500 font-bold transition-all text-sm focus:bg-white" 
-                value={loginData.password} 
-                onChange={e => setLoginData({...loginData, password: e.target.value})} 
-                required 
-              />
-            </div>
-            <button className="w-full bg-slate-900 hover:bg-slate-800 text-white font-black py-4.5 rounded-2xl transition-all shadow-xl uppercase tracking-widest text-sm mt-2 active:scale-95 flex items-center justify-center gap-2">
-              <ShieldCheck size={18} />
-              {t.login}
-            </button>
-          </form>
-          
-          <div className="relative my-12">
-            <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-slate-100"></div></div>
-            <div className="relative flex justify-center text-[10px] uppercase font-black tracking-widest">
-              <span className="bg-white px-6 text-slate-400">Cloud Synchronization</span>
-            </div>
-          </div>
 
-          <button 
-            onClick={handleGoogleLogin}
-            className="w-full bg-white border-2 border-slate-900 text-slate-900 font-black py-4.5 rounded-2xl transition-all flex items-center justify-center gap-3 uppercase text-[10px] tracking-widest hover:bg-slate-50 shadow-md active:scale-95 group"
-          >
-            <Globe size={20} className="text-blue-600 group-hover:rotate-12 transition-transform"/> 
-            {t.syncStatus === 'Connected' ? 'Syncing...' : 'Sign in with Google'}
-          </button>
-
-          <div className="mt-10 flex justify-center gap-4">
-            <button onClick={() => handleLangChange('am')} className={`px-6 py-2.5 rounded-full text-[11px] font-black transition-all ${lang === 'am' ? 'bg-amber-600 text-white shadow-lg scale-105' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}>አማርኛ</button>
-            <button onClick={() => handleLangChange('en')} className={`px-6 py-2.5 rounded-full text-[11px] font-black transition-all ${lang === 'en' ? 'bg-amber-600 text-white shadow-lg scale-105' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}>ENGLISH</button>
-          </div>
-
-          <div className="mt-14 text-center space-y-6">
-            <div className="relative px-4">
-              <div className="absolute -top-6 left-1/2 -translate-x-1/2 opacity-5 text-slate-900">
-                <ShieldAlert size={80} />
-              </div>
-              <p className="text-base font-serif italic font-black text-slate-800 tracking-tight leading-relaxed relative z-10">
-                "{t.motto}"
-              </p>
-            </div>
-            
-            <div className="pt-6 border-t border-slate-100">
-              <p className="text-[9px] text-amber-700 font-black uppercase tracking-[0.25em] leading-relaxed max-w-[260px] mx-auto opacity-90">
+            <div className="mt-12 text-center border-t border-slate-100 pt-8 w-full">
+              <p className="text-[9px] text-slate-400 font-black uppercase tracking-[0.25em] leading-relaxed">
                 {t.developerCredit}
               </p>
-              <button 
-                onClick={() => setView('utility')}
-                className="mt-4 text-[9px] font-black text-blue-600 uppercase tracking-widest hover:underline"
-              >
-                Learn More / ተጨማሪ መረጃ
-              </button>
             </div>
           </div>
         </div>
@@ -635,7 +803,11 @@ function AppContent() {
           </div>
           <div className="flex flex-col gap-4">
             <button 
-              onClick={() => { setHasAgreed(true); setView('dashboard'); }}
+              onClick={() => { 
+                setHasAgreed(true); 
+                localStorage.setItem('begu_engeda_agreed', 'true');
+                setView('dashboard'); 
+              }}
               className="w-full bg-slate-900 hover:bg-slate-800 text-white font-black py-4 rounded-xl transition-all shadow-xl uppercase tracking-widest text-sm"
             >
               {t.agree}
@@ -672,6 +844,7 @@ function AppContent() {
           )}
           {(user?.role === UserRole.LOCAL_POLICE || user?.role === UserRole.SUPER_POLICE) && (
             <>
+              <NavItem icon={<Map size={18}/>} label={t.map} active={view === 'map'} onClick={() => setView('map')} />
               <NavItem icon={<Plus size={18}/>} label={t.policeNotice} active={view === 'addWanted'} onClick={() => setView('addWanted')} />
               <NavItem icon={<AlertTriangle size={18}/>} label={t.wantedPersons} active={view === 'wantedPersons'} onClick={() => setView('wantedPersons')} />
               <NavItem icon={<Users size={18}/>} label={t.guestList} active={view === 'guestList'} onClick={() => setView('guestList')} />
@@ -753,7 +926,39 @@ function AppContent() {
           )}
           
           {view === 'setupHotel' && <SetupForm hotelProfile={hotelProfile} setHotelProfile={setHotelProfile} onSubmit={handleSetupSubmit} t={t} handleFileUpload={handleFileUpload} />}
-          {view === 'setupPolice' && <div className="max-w-md mx-auto bg-white p-8 rounded-xl shadow-lg border border-gray-100"><h3 className="text-xl font-bold mb-6 uppercase text-slate-800">Assigned Jurisdiction</h3><div className="space-y-4">{ZONES.map(z => <button key={z} onClick={() => { if (user) setUser({...user, zone: z}); setView('agreement'); }} className="w-full text-left p-4 bg-gray-50 border rounded-lg font-bold text-gray-600 hover:bg-amber-50 hover:border-amber-500 transition-all">{z}</button>)}</div></div>}
+          {view === 'setupPolice' && (
+            <div className="max-w-md mx-auto bg-white p-8 rounded-xl shadow-lg border border-gray-100">
+              <h3 className="text-xl font-bold mb-6 uppercase text-slate-800">Assigned Jurisdiction / የሥራ ክልል ይምረጡ</h3>
+              <div className="space-y-4">
+                {ZONES.map(z => (
+                  <button 
+                    key={z} 
+                    onClick={async () => { 
+                      if (user) {
+                        try {
+                          if (user.email?.endsWith('@shared.com')) {
+                            localStorage.setItem('begu_engeda_police_zone', z);
+                            setCurrentPoliceZone(z);
+                          } else {
+                            const updatedUser = {...user, zone: z};
+                            setUser(updatedUser);
+                            await setDoc(doc(db, 'users', user.uid), { zone: z }, { merge: true });
+                          }
+                          setView('agreement'); 
+                        } catch (error) {
+                          console.error("Failed to save zone:", error);
+                          alert("Failed to save jurisdiction. Please try again.");
+                        }
+                      }
+                    }} 
+                    className="w-full text-left p-4 bg-gray-50 border rounded-lg font-bold text-gray-600 hover:bg-amber-50 hover:border-amber-500 transition-all"
+                  >
+                    {z}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
           
           {view === 'dashboard' && <Dashboard user={user} t={t} guests={visibleGuests} notifications={filteredNotifs} wanted={wanted} setView={setView} hotelProfile={hotelProfile} activePoliceZone={activePoliceZone} />}
           {view === 'guestList' && <ListView items={visibleGuests} t={t} setZoomImg={setZoomImg} user={user} />}
@@ -761,10 +966,11 @@ function AppContent() {
           {view === 'addWanted' && <WantedForm wanted={wanted} setWanted={setWanted} t={t} handleFileUpload={handleFileUpload} addWanted={addWanted} newWanted={newWanted} setNewWanted={setNewWanted} />}
           {view === 'wantedPersons' && <WantedList wanted={wanted} t={t} setZoomImg={setZoomImg} />}
           {view === 'hotelDirectory' && <HotelDir hotels={allHotels} t={t} user={user} />}
+          {view === 'map' && <MapView hotels={allHotels} guests={visibleGuests} t={t} user={user} selectedHotel={selectedHotelOnMap} setSelectedHotel={setSelectedHotelOnMap} />}
           {view === 'utility' && <div className="bg-white p-10 rounded-xl shadow-sm border space-y-6"><h3 className={`text-2xl text-center ${GOLDEN_GRADIENT}`}>{t.appUtility}</h3><p className="text-gray-600 font-bold leading-relaxed">{t.utilityText}</p><p className="text-amber-700 font-black uppercase text-center mt-10">{t.developerCredit}</p></div>}
           {view === 'reports' && <ReportSection t={t} guests={visibleGuests} user={user} hotelProfile={hotelProfile} />}
           {view === 'notifications' && <NotifView notifications={filteredNotifs} t={t} setView={setView} user={user} hotelProfile={hotelProfile} />}
-          {view === 'settings' && <SetupForm hotelProfile={hotelProfile} setHotelProfile={setHotelProfile} onSubmit={handleSetupSubmit} t={t} handleFileUpload={handleFileUpload} isSettings />}
+          {view === 'settings' && <SetupForm hotelProfile={hotelProfile} setHotelProfile={setHotelProfile} onSubmit={handleSetupSubmit} t={t} handleFileUpload={handleFileUpload} isSettings user={user} />}
           {view === 'policeSettings' && <PoliceSettings 
             t={t} 
             lang={lang} 
@@ -785,42 +991,114 @@ function AppContent() {
 
 function NavItem({ icon, label, active, onClick, count }: any) {
   return (
-    <button onClick={onClick} className={`w-full flex items-center gap-3 px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wider transition-all ${active ? 'bg-amber-500 text-white shadow-md' : 'text-gray-400 hover:bg-white/5'}`}>
-      <span>{icon}</span>
+    <button 
+      onClick={onClick} 
+      className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all duration-200 group relative overflow-hidden ${
+        active 
+          ? 'bg-amber-500 text-slate-900 shadow-[0_10px_20px_-5px_rgba(245,158,11,0.4)] scale-[1.02]' 
+          : 'text-slate-400 hover:bg-white/5 hover:text-white'
+      }`}
+    >
+      <span className={`transition-transform duration-300 ${active ? 'scale-110' : 'group-hover:scale-110'}`}>{icon}</span>
       <span className="flex-1 text-left">{label}</span>
-      {count > 0 && <span className="bg-red-500 text-white text-[9px] px-1.5 py-0.5 rounded-full">{count}</span>}
+      {count > 0 && (
+        <span className={`text-[9px] px-2 py-0.5 rounded-full font-black ${
+          active ? 'bg-slate-900 text-white' : 'bg-red-500 text-white animate-pulse'
+        }`}>
+          {count}
+        </span>
+      )}
+      {active && <div className="absolute left-0 top-0 w-1 h-full bg-slate-900/20"></div>}
     </button>
   );
 }
 
-function SetupForm({ hotelProfile, setHotelProfile, onSubmit, t, isSettings, handleFileUpload }: any) {
+function SetupForm({ hotelProfile, setHotelProfile, onSubmit, t, isSettings, handleFileUpload, user }: any) {
   const [needsId, setNeedsId] = useState(isSettings);
   return (
-    <div className="max-w-md mx-auto bg-white p-8 rounded-xl shadow-lg border">
-      <h3 className="text-xl font-bold mb-6 text-slate-800 uppercase">{t.setupHotel}</h3>
-      <form onSubmit={onSubmit} className="space-y-4">
-        <Input label={t.hotel} value={hotelProfile.name} onChange={(v: string) => setHotelProfile({...hotelProfile, name: v})} required />
-        <Input label={t.hotelAddress} value={hotelProfile.address} onChange={(v: string) => setHotelProfile({...hotelProfile, address: v})} required />
-        <div className="space-y-1">
-          <label className="text-[10px] font-bold text-gray-500 uppercase">{t.zone}</label>
-          <select className="w-full bg-gray-50 border rounded-lg px-4 py-2.5 font-bold" value={hotelProfile.zone} onChange={e => setHotelProfile({...hotelProfile, zone: e.target.value})} required>
-            <option value="">Select Zone</option>{ZONES.map(z => <option key={z} value={z}>{z}</option>)}
-          </select>
+    <div className="max-w-xl mx-auto bg-white p-10 rounded-[2.5rem] shadow-[0_30px_60px_rgba(0,0,0,0.05)] border border-slate-100 animate-in fade-in zoom-in-95 duration-500">
+      <div className="text-center mb-10">
+        <div className="w-16 h-16 bg-amber-50 rounded-2xl flex items-center justify-center text-amber-600 mx-auto mb-4 border border-amber-100">
+          <Building2 size={32}/>
         </div>
-        <Input label={t.receptionistName} value={hotelProfile.receptionistName} onChange={(v: string) => setHotelProfile({...hotelProfile, receptionistName: v})} required />
-        <Input label={t.phoneNumber} value={hotelProfile.phoneNumber} onChange={(v: string) => setHotelProfile({...hotelProfile, phoneNumber: v})} type="tel" required />
+        <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tighter">{t.setupHotel}</h3>
+        <p className="text-slate-400 text-xs font-bold uppercase tracking-widest mt-2">Establishment Registration</p>
+      </div>
+
+      <form onSubmit={onSubmit} className="space-y-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <Input label={t.hotel} value={hotelProfile.name} onChange={(v: string) => setHotelProfile({...hotelProfile, name: v})} required />
+          <div className="space-y-2">
+            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">{t.zone}</label>
+            <select className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-5 py-4 font-black uppercase text-[11px] tracking-widest focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all" value={hotelProfile.zone} onChange={e => setHotelProfile({...hotelProfile, zone: e.target.value})} required>
+              <option value="">Select Jurisdiction</option>
+              {ZONES.map(z => <option key={z} value={z}>{z}</option>)}
+            </select>
+          </div>
+        </div>
+
+        <Input label={t.hotelAddress} value={hotelProfile.address} onChange={(v: string) => setHotelProfile({...hotelProfile, address: v})} required />
+        
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <Input label={t.receptionistName} value={hotelProfile.receptionistName} onChange={(v: string) => setHotelProfile({...hotelProfile, receptionistName: v})} required />
+          <Input label={t.phoneNumber} value={hotelProfile.phoneNumber} onChange={(v: string) => setHotelProfile({...hotelProfile, phoneNumber: v})} type="tel" required />
+        </div>
+
         {needsId && (
-          <div className="space-y-4">
-            <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg text-[10px] font-bold text-amber-700 uppercase">{t.verificationRequired}</div>
-            <div className="p-4 bg-gray-50 border rounded-lg text-center cursor-pointer" onClick={() => document.getElementById('hotelIdUpload')?.click()}>
-              <Fingerprint className="mx-auto mb-2 text-gray-400" size={24}/>
-              <p className="text-[10px] font-black uppercase text-gray-500">{t.digitalId}</p>
+          <div className="space-y-6 pt-4">
+            <div className="p-5 bg-amber-50/50 border border-amber-100 rounded-2xl">
+              <div className="flex items-center gap-3 mb-2">
+                <ShieldCheck size={18} className="text-amber-600" />
+                <p className="text-[11px] font-black text-amber-700 uppercase tracking-widest">{t.verificationRequired}</p>
+              </div>
+              <p className="text-[10px] font-bold text-amber-600/70 uppercase leading-relaxed">Please provide a valid digital ID for security verification.</p>
+            </div>
+            
+            <div 
+              className="p-8 bg-slate-50 border-2 border-dashed border-slate-200 rounded-[2rem] text-center cursor-pointer hover:bg-slate-100 hover:border-indigo-400 transition-all group" 
+              onClick={() => document.getElementById('hotelIdUpload')?.click()}
+            >
+              <div className="w-12 h-12 bg-white rounded-xl flex items-center justify-center text-slate-400 mx-auto mb-4 shadow-sm group-hover:scale-110 transition-transform">
+                <Camera size={24}/>
+              </div>
+              <p className="text-[11px] font-black uppercase text-slate-500 tracking-widest">{t.digitalId}</p>
+              <p className="text-[9px] text-slate-400 font-bold uppercase mt-1">Click to upload or drag & drop</p>
               <input type="file" id="hotelIdUpload" className="hidden" onChange={e => handleFileUpload(e, 'hotel')} />
             </div>
-            {hotelProfile.digitalIdPhoto && <img src={hotelProfile.digitalIdPhoto} className="w-20 h-24 mx-auto object-cover rounded shadow" />}
+            {hotelProfile.digitalIdPhoto && (
+              <div className="relative w-32 h-40 mx-auto group">
+                <img src={hotelProfile.digitalIdPhoto} className="w-full h-full object-cover rounded-2xl shadow-2xl border-4 border-white" />
+                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity rounded-2xl flex items-center justify-center">
+                  <Edit size={20} className="text-white" />
+                </div>
+              </div>
+            )}
           </div>
         )}
-        <button className="w-full bg-slate-800 text-white font-bold py-3 rounded-lg uppercase text-sm">{t.save}</button>
+
+        {isSettings && user.email?.endsWith('@shared.com') && (
+          <div className="pt-6 border-t border-slate-100">
+            <div className="p-5 bg-red-50 border border-red-100 rounded-2xl mb-6">
+              <p className="text-[11px] font-black text-red-700 uppercase tracking-widest mb-1">Shared Terminal Session</p>
+              <p className="text-[10px] font-bold text-red-600/70 uppercase leading-relaxed">Resetting the session will allow you to select or register a different hotel on this device.</p>
+            </div>
+            <button 
+              type="button"
+              onClick={() => {
+                localStorage.removeItem('begu_engeda_hotel_id');
+                window.location.reload();
+              }}
+              className="w-full py-4 bg-red-600 text-white rounded-2xl font-black uppercase text-xs tracking-widest hover:bg-red-700 transition-all shadow-lg"
+            >
+              Reset Hotel Selection
+            </button>
+          </div>
+        )}
+
+        <button className="w-full bg-slate-900 hover:bg-slate-800 text-white font-black py-5 rounded-2xl uppercase tracking-widest text-xs shadow-xl shadow-slate-900/20 transition-all active:scale-[0.98] flex items-center justify-center gap-3">
+          <CheckCircle2 size={18} className="text-amber-500" />
+          {isSettings ? 'Update Profile' : 'Complete Setup'}
+        </button>
       </form>
     </div>
   );
@@ -828,97 +1106,163 @@ function SetupForm({ hotelProfile, setHotelProfile, onSubmit, t, isSettings, han
 
 function Dashboard({ t, guests, notifications, wanted, setView, user, hotelProfile, activePoliceZone }: any) {
   const stats = [
-    { l: t.guestList, v: guests.length, c: 'bg-indigo-600', role: [UserRole.RECEPTION, UserRole.LOCAL_POLICE, UserRole.SUPER_POLICE] },
-    { l: t.wantedPersons, v: wanted.length, c: 'bg-red-600', role: [UserRole.LOCAL_POLICE, UserRole.SUPER_POLICE] },
-    { l: t.notifications, v: notifications.length, c: 'bg-amber-600', role: [UserRole.RECEPTION, UserRole.LOCAL_POLICE, UserRole.SUPER_POLICE] }
+    { l: t.guestList, v: guests.length, c: 'bg-indigo-600', icon: <Users size={20}/>, role: [UserRole.RECEPTION, UserRole.LOCAL_POLICE, UserRole.SUPER_POLICE] },
+    { l: 'Flagged Guests', v: guests.filter((g: any) => g.verificationStatus === 'flagged').length, c: 'bg-red-500', icon: <AlertCircle size={20}/>, role: [UserRole.LOCAL_POLICE, UserRole.SUPER_POLICE] },
+    { l: t.wantedPersons, v: wanted.length, c: 'bg-red-600', icon: <AlertTriangle size={20}/>, role: [UserRole.LOCAL_POLICE, UserRole.SUPER_POLICE] },
+    { l: t.notifications, v: notifications.length, c: 'bg-amber-600', icon: <Bell size={20}/>, role: [UserRole.RECEPTION, UserRole.LOCAL_POLICE, UserRole.SUPER_POLICE] }
   ].filter(s => s.role.includes(user.role));
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-10 animate-in fade-in slide-in-from-bottom-4 duration-700">
+      <div className="flex justify-between items-end mb-4">
+        <div>
+          <h2 className="text-3xl font-black text-slate-900 uppercase tracking-tighter leading-none">
+            {user.role === UserRole.RECEPTION ? 'Reception Dashboard' : 
+             user.role === UserRole.SUPER_POLICE ? 'Admin Commission Dashboard' : 
+             'Police Jurisdiction Dashboard'}
+          </h2>
+          <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] mt-3">
+            {user.role === UserRole.RECEPTION ? 'Hotel Management Terminal' : 
+             user.role === UserRole.SUPER_POLICE ? 'Regional Security Oversight' : 
+             `Local Enforcement: ${user.zone || 'Unassigned'}`}
+          </p>
+        </div>
+      </div>
+
       {user.role === UserRole.RECEPTION && hotelProfile.name && (
-        <div className="bg-white p-6 rounded-xl border shadow-sm flex justify-between items-center">
-          <div className="flex items-center gap-4">
-            <div className="w-12 h-12 bg-slate-100 rounded-lg flex items-center justify-center text-slate-400">
-              <Building2 size={24}/>
+        <div className="bg-white p-8 rounded-[2rem] border border-slate-100 shadow-[0_20px_50px_rgba(0,0,0,0.04)] flex flex-col sm:flex-row justify-between items-center gap-6">
+          <div className="flex items-center gap-6">
+            <div className="w-16 h-16 bg-slate-50 rounded-2xl flex items-center justify-center text-slate-400 border border-slate-100 shadow-inner">
+              <Building2 size={32}/>
             </div>
             <div>
-              <h4 className="text-sm font-black text-slate-800 uppercase leading-none mb-1">{hotelProfile.name}</h4>
-              <p className="text-[10px] text-gray-400 font-bold uppercase">{hotelProfile.address} • {hotelProfile.zone}</p>
+              <h4 className="text-xl font-black text-slate-900 uppercase tracking-tighter leading-none mb-2">{hotelProfile.name}</h4>
+              <div className="flex items-center gap-3">
+                <span className="text-[10px] text-slate-400 font-black uppercase tracking-widest bg-slate-50 px-2 py-1 rounded border border-slate-100">{hotelProfile.zone}</span>
+                <span className="text-[10px] text-slate-400 font-black uppercase tracking-widest">{hotelProfile.address}</span>
+              </div>
             </div>
           </div>
-          <button onClick={() => setView('settings')} className="flex items-center gap-2 px-4 py-2 bg-amber-50 text-amber-600 rounded-lg text-[10px] font-black uppercase hover:bg-amber-100 transition-all">
-            <Edit size={14}/> {t.edit}
+          <button onClick={() => setView('settings')} className="flex items-center gap-2 px-6 py-3 bg-slate-900 text-white rounded-xl text-[11px] font-black uppercase tracking-widest hover:bg-slate-800 transition-all shadow-lg shadow-slate-200 active:scale-95">
+            <Edit size={14} className="text-amber-500"/> {t.edit} Profile
           </button>
         </div>
       )}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-8">
         {stats.map(s => (
           <div 
             key={s.l} 
-            className="bg-white p-6 rounded-xl border flex items-center justify-between shadow-sm cursor-pointer hover:border-amber-500 transition-all" 
+            className="bg-white p-8 rounded-[2rem] border border-slate-100 flex items-center justify-between shadow-[0_20px_50px_rgba(0,0,0,0.04)] cursor-pointer hover:border-amber-500 hover:shadow-[0_30px_60px_rgba(0,0,0,0.08)] transition-all duration-300 group" 
             onClick={() => setView(s.l === t.guestList ? 'guestList' : s.l === t.wantedPersons ? 'wantedPersons' : 'notifications')}
           >
-            <div><p className="text-[10px] font-black text-gray-400 uppercase mb-1">{s.l}</p><p className="text-3xl font-black text-gray-800">{s.v}</p></div>
-            <div className={`${s.c} w-10 h-10 rounded-lg flex items-center justify-center text-white shadow-lg`}><Activity size={18}/></div>
+            <div>
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2 group-hover:text-amber-600 transition-colors">{s.l}</p>
+              <p className="text-4xl font-black text-slate-900 tracking-tighter">{s.v}</p>
+            </div>
+            <div className={`${s.c} w-14 h-14 rounded-2xl flex items-center justify-center text-white shadow-xl transform group-hover:rotate-12 transition-transform duration-300`}>
+              {s.icon}
+            </div>
           </div>
         ))}
       </div>
+
       {(user.role === UserRole.LOCAL_POLICE || user.role === UserRole.SUPER_POLICE) && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <div className="bg-white p-6 rounded-xl border h-80 shadow-sm">
-            <h4 className="font-black text-slate-400 uppercase mb-4 text-[10px]">Regional Traffic Analysis</h4>
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={[{n:'Daily', v:guests.length},{n:'Regional', v:12}]}>
-                <XAxis dataKey="n"/><YAxis/><Tooltip/><Bar dataKey="v" fill="#4f46e5" radius={[4,4,0,0]}/>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          <div className="lg:col-span-2 bg-white p-8 rounded-[2rem] border border-slate-100 shadow-[0_20px_50px_rgba(0,0,0,0.04)] h-[400px]">
+            <div className="flex justify-between items-center mb-8">
+              <h4 className="font-black text-slate-900 uppercase tracking-widest text-xs">Regional Traffic Analysis</h4>
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 rounded-full bg-indigo-600"></div>
+                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Guest Volume</span>
+              </div>
+            </div>
+            <ResponsiveContainer width="100%" height="85%">
+              <BarChart data={[{n:'Mon', v:guests.length},{n:'Tue', v:12},{n:'Wed', v:18},{n:'Thu', v:15},{n:'Fri', v:25},{n:'Sat', v:30},{n:'Sun', v:22}]}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                <XAxis dataKey="n" axisLine={false} tickLine={false} tick={{fontSize: 10, fontWeight: 900, fill: '#94a3b8'}} />
+                <YAxis axisLine={false} tickLine={false} tick={{fontSize: 10, fontWeight: 900, fill: '#94a3b8'}} />
+                <Tooltip 
+                  contentStyle={{borderRadius: '16px', border: 'none', boxShadow: '0 20px 50px rgba(0,0,0,0.1)', fontWeight: 900, fontSize: '12px'}}
+                  cursor={{fill: '#f8fafc'}}
+                />
+                <Bar dataKey="v" fill="#4f46e5" radius={[6,6,0,0]} barSize={32} />
               </BarChart>
             </ResponsiveContainer>
           </div>
-          <div className="bg-slate-900 p-6 rounded-xl border border-slate-800 h-80 shadow-xl overflow-hidden flex flex-col">
-             <div className="flex justify-between items-center mb-4">
-                <h4 className="font-black text-amber-500 uppercase text-[10px] flex items-center gap-2">
-                   <Activity size={14} className="animate-pulse"/> Live Regional Monitoring
+
+          <div className="bg-slate-900 p-8 rounded-[2rem] shadow-[0_30px_60px_rgba(0,0,0,0.2)] h-[400px] overflow-hidden flex flex-col relative">
+             <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-amber-500 to-yellow-400"></div>
+             <div className="flex justify-between items-center mb-6">
+                <h4 className="font-black text-white uppercase text-[10px] tracking-widest flex items-center gap-2">
+                   <div className="w-2 h-2 rounded-full bg-red-500 animate-ping"></div>
+                   Live Monitoring
                 </h4>
-                <span className="text-[8px] text-slate-500 font-bold uppercase">Updates every 5s</span>
+                <span className="text-[9px] text-white/40 font-black uppercase tracking-widest">Real-time Feed</span>
              </div>
-             <div className="flex-1 space-y-3 overflow-y-auto pr-2 custom-scrollbar">
-                {guests.slice(0, 10).map((g: any) => (
-                  <div key={g.id} className="p-3 bg-slate-800/50 border border-slate-700 rounded-lg flex items-center justify-between group hover:bg-slate-800 transition-all">
-                    <div className="flex items-center gap-3">
-                       <div className="w-8 h-8 rounded bg-slate-700 flex items-center justify-center text-[10px] font-black text-slate-400">{g.fullName[0]}</div>
+             <div className="flex-1 space-y-4 overflow-y-auto pr-2 custom-scrollbar">
+                {guests.length > 0 ? guests.slice(0, 10).map((g: any) => (
+                  <div key={g.id} className="p-4 bg-white/5 border border-white/5 rounded-2xl flex items-center justify-between group hover:bg-white/10 transition-all duration-300">
+                    <div className="flex items-center gap-4">
+                       <div className="w-10 h-10 rounded-xl bg-slate-800 flex items-center justify-center text-xs font-black text-amber-500 border border-white/5">{g.fullName[0]}</div>
                        <div>
-                          <p className="text-[10px] font-black text-slate-200 uppercase leading-none mb-1">{g.fullName}</p>
-                          <p className="text-[8px] text-slate-500 font-bold uppercase">{g.hotelName} • Room {g.roomNumber}</p>
+                          <p className="text-[11px] font-black text-white uppercase leading-none mb-1.5">{g.fullName}</p>
+                          <p className="text-[9px] text-white/40 font-bold uppercase tracking-wider">{g.hotelName}</p>
                        </div>
                     </div>
                     <div className="text-right">
-                       <p className="text-[8px] text-slate-500 font-bold uppercase">{g.checkInDate}</p>
-                       {g.isWanted && <span className="text-[7px] bg-red-500 text-white px-1 rounded font-black uppercase animate-pulse">Wanted</span>}
+                       <p className="text-[9px] text-white/40 font-bold uppercase mb-1">{g.checkInDate}</p>
+                       {g.isWanted && <span className="text-[8px] bg-red-600 text-white px-2 py-0.5 rounded-full font-black uppercase shadow-lg shadow-red-900/40">Wanted</span>}
                     </div>
                   </div>
-                ))}
+                )) : (
+                  <div className="h-full flex flex-col items-center justify-center text-center space-y-4 opacity-40">
+                    <Activity size={48} className="text-slate-700" />
+                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">No active traffic detected</p>
+                  </div>
+                )}
              </div>
           </div>
         </div>
       )}
-      <div className="bg-white p-6 rounded-xl border shadow-sm">
-        <h4 className="font-black text-slate-800 uppercase mb-4 text-xs">Recent Activity</h4>
+
+      <div className="bg-white p-8 rounded-[2rem] border border-slate-100 shadow-[0_20px_50px_rgba(0,0,0,0.04)]">
+        <div className="flex justify-between items-center mb-8">
+          <h4 className="font-black text-slate-900 uppercase tracking-widest text-xs">Recent Activity Log</h4>
+          <button onClick={() => setView('guestList')} className="text-[10px] font-black text-indigo-600 uppercase tracking-widest hover:underline">View All Records</button>
+        </div>
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-[11px] font-bold">
-            <thead className="bg-gray-50 uppercase text-gray-400">
+          <table className="w-full text-left">
+            <thead className="bg-slate-50/50 uppercase text-slate-400 text-[10px] font-black tracking-widest">
               <tr>
-                <th className="p-3">Guest Name</th>
-                <th className="p-3">Property</th>
-                {(user.role === UserRole.LOCAL_POLICE || user.role === UserRole.SUPER_POLICE) && <th className="p-3 text-center">Status</th>}
+                <th className="px-6 py-4 rounded-l-2xl">Guest Identity</th>
+                <th className="px-6 py-4">Establishment</th>
+                <th className="px-6 py-4">Check-in Time</th>
+                {(user.role === UserRole.LOCAL_POLICE || user.role === UserRole.SUPER_POLICE) && <th className="px-6 py-4 text-center rounded-r-2xl">Security Status</th>}
               </tr>
             </thead>
-            <tbody>
+            <tbody className="divide-y divide-slate-50">
               {guests.slice(0,5).map((g: any) => (
-                <tr key={g.id} className="border-t hover:bg-gray-50">
-                  <td className="p-3 uppercase">{g.fullName}</td>
-                  <td className="p-3 uppercase text-gray-500">{g.hotelName}</td>
+                <tr key={g.id} className="group hover:bg-slate-50/50 transition-colors">
+                  <td className="px-6 py-5">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center text-[10px] font-black text-slate-500">{g.fullName[0]}</div>
+                      <span className="text-[11px] font-black text-slate-900 uppercase">{g.fullName}</span>
+                    </div>
+                  </td>
+                  <td className="px-6 py-5 text-[11px] font-bold text-slate-500 uppercase">{g.hotelName}</td>
+                  <td className="px-6 py-5 text-[11px] font-bold text-slate-500 uppercase">{g.checkInDate}</td>
                   {(user.role === UserRole.LOCAL_POLICE || user.role === UserRole.SUPER_POLICE) && (
-                    <td className="p-3 text-center">
-                      {g.isWanted ? <span className="text-red-600">Wanted</span> : <span className="text-emerald-600">Clear</span>}
+                    <td className="px-6 py-5 text-center">
+                      {g.isWanted ? (
+                        <span className="inline-flex items-center gap-1.5 text-red-600 bg-red-50 px-3 py-1 rounded-full text-[9px] font-black uppercase">
+                          <ShieldAlert size={10}/> Wanted
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1.5 text-emerald-600 bg-emerald-50 px-3 py-1 rounded-full text-[9px] font-black uppercase">
+                          <ShieldCheck size={10}/> Verified
+                        </span>
+                      )}
                     </td>
                   )}
                 </tr>
@@ -931,11 +1275,24 @@ function Dashboard({ t, guests, notifications, wanted, setView, user, hotelProfi
   );
 }
 
-function Input({ label, value, onChange, type = "text", required }: any) {
+function Input({ label, value, onChange, type = "text", required, icon: Icon }: any) {
   return (
-    <div className="space-y-1">
-      <label className="text-[10px] font-bold text-gray-500 uppercase ml-1">{label}</label>
-      <input type={type} className="w-full bg-gray-50 border border-gray-200 rounded-lg px-4 py-2 text-sm font-bold focus:ring-2 focus:ring-amber-500 outline-none" value={value} onChange={e => onChange(e.target.value)} required={required} />
+    <div className="space-y-2">
+      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">{label}</label>
+      <div className="relative group">
+        {Icon && (
+          <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-amber-500 transition-colors">
+            <Icon size={16} />
+          </div>
+        )}
+        <input 
+          type={type} 
+          className={`w-full bg-slate-50 border border-slate-200 rounded-xl ${Icon ? 'pl-12' : 'px-4'} py-3.5 text-sm font-bold text-slate-900 focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 outline-none transition-all placeholder:text-slate-300`} 
+          value={value} 
+          onChange={e => onChange(e.target.value)} 
+          required={required} 
+        />
+      </div>
     </div>
   );
 }
@@ -944,46 +1301,76 @@ function ListView({ items, t, setZoomImg, user }: any) {
   const [selectedGuest, setSelectedGuest] = useState<any>(null);
 
   return (
-    <div className="bg-white rounded-xl shadow border overflow-hidden">
+    <div className="bg-white rounded-[2rem] shadow-[0_20px_50px_rgba(0,0,0,0.04)] border border-slate-100 overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-700">
       <div className="overflow-x-auto">
         <table className="w-full text-left min-w-[1000px]">
-          <thead className="bg-gray-50 text-[10px] font-bold uppercase text-gray-400">
+          <thead className="bg-slate-50/50 text-[10px] font-black uppercase text-slate-400 tracking-widest">
             <tr>
-              <th className="px-6 py-4">ID</th>
-              <th className="px-6 py-4">{t.fullName}</th>
-              <th className="px-6 py-4">{t.guestPhone}</th>
-              <th className="px-6 py-4">{t.roomNumber}</th>
-              <th className="px-6 py-4">{t.origin} / {t.purpose}</th>
-              <th className="px-6 py-4">{t.duration}</th>
-              <th className="px-6 py-4">Property Data</th>
-              {(user.role === UserRole.LOCAL_POLICE || user.role === UserRole.SUPER_POLICE) && <th className="px-6 py-4">Status</th>}
-              <th className="px-6 py-4 text-center">Actions</th>
+              <th className="px-8 py-6">ID Document</th>
+              <th className="px-6 py-6">{t.fullName}</th>
+              <th className="px-6 py-6">{t.guestPhone}</th>
+              <th className="px-6 py-6">{t.roomNumber}</th>
+              <th className="px-6 py-6">{t.origin} / {t.purpose}</th>
+              <th className="px-6 py-6">{t.duration}</th>
+              <th className="px-6 py-6">Establishment</th>
+              {(user.role === UserRole.LOCAL_POLICE || user.role === UserRole.SUPER_POLICE) && <th className="px-6 py-6">Security Status</th>}
+              <th className="px-8 py-6 text-center">Actions</th>
             </tr>
           </thead>
-          <tbody className="divide-y text-xs font-bold uppercase text-gray-700">
+          <tbody className="divide-y divide-slate-50 text-[11px] font-bold uppercase text-slate-600">
             {items.map((g: any) => (
-              <tr key={g.id} className="hover:bg-gray-50 transition-colors">
-                <td className="px-6 py-3"><img src={g.idPhoto} className="w-8 h-10 rounded object-cover shadow-sm cursor-zoom-in" onClick={() => setZoomImg(g.idPhoto)} /></td>
-                <td className="px-6 py-3">{g.fullName}</td>
-                <td className="px-6 py-3">{g.guestPhone}</td>
-                <td className="px-6 py-3">{g.roomNumber}</td>
-                <td className="px-6 py-3 leading-tight">{g.origin}<br/><span className="text-[9px] text-gray-400">{g.purpose}</span></td>
-                <td className="px-6 py-3">{g.duration}</td>
-                <td className="px-6 py-3 leading-tight">
-                  {g.hotelName}<br/>
-                  <span className="text-[9px] text-gray-400">{g.hotelZone}</span>
+              <tr key={g.id} className="hover:bg-slate-50/50 transition-all group">
+                <td className="px-8 py-4">
+                  <div className="relative w-12 h-16 rounded-lg overflow-hidden shadow-md group-hover:shadow-xl transition-all border-2 border-white">
+                    <img 
+                      src={g.idPhoto} 
+                      className="w-full h-full object-cover cursor-zoom-in" 
+                      onClick={() => setZoomImg(g.idPhoto)} 
+                    />
+                    <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none">
+                      <Maximize2 size={16} className="text-white" />
+                    </div>
+                  </div>
                 </td>
-                {(user.role === UserRole.LOCAL_POLICE || user.role === UserRole.SUPER_POLICE) && (
-                  <td className="px-6 py-3">
-                    {g.isWanted ? <span className="text-red-600 animate-pulse">Wanted</span> : <span className="text-emerald-600">Clear</span>}
-                  </td>
-                )}
-                <td className="px-6 py-3 text-center">
+                <td className="px-6 py-4 font-black text-slate-900">{g.fullName}</td>
+                <td className="px-6 py-4 tracking-tighter">{g.guestPhone}</td>
+                <td className="px-6 py-4">
+                  <span className="bg-slate-100 px-2 py-1 rounded text-[10px] font-black">{g.roomNumber}</span>
+                </td>
+                <td className="px-6 py-4 leading-tight">
+                  <p className="mb-1">{g.origin}</p>
+                  <span className="text-[9px] text-slate-400 font-black tracking-widest">{g.purpose}</span>
+                </td>
+                <td className="px-6 py-4">{g.duration}</td>
+                <td className="px-6 py-4 leading-tight">
+                  <p className="mb-1 text-slate-900">{g.hotelName}</p>
+                  <span className="text-[9px] text-slate-400 font-black tracking-widest">{g.hotelZone}</span>
+                </td>
+                <td className="px-6 py-4">
+                  {g.isWanted ? (
+                    <span className="inline-flex items-center gap-1.5 text-red-600 bg-red-50 px-3 py-1 rounded-full text-[9px] font-black uppercase animate-pulse">
+                      <ShieldAlert size={10}/> Wanted
+                    </span>
+                  ) : g.verificationStatus === 'flagged' ? (
+                    <span className="inline-flex items-center gap-1.5 text-amber-600 bg-amber-50 px-3 py-1 rounded-full text-[9px] font-black uppercase">
+                      <AlertCircle size={10}/> Flagged
+                    </span>
+                  ) : g.verificationStatus === 'verified' ? (
+                    <span className="inline-flex items-center gap-1.5 text-emerald-600 bg-emerald-50 px-3 py-1 rounded-full text-[9px] font-black uppercase">
+                      <ShieldCheck size={10}/> Verified
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1.5 text-slate-400 bg-slate-50 px-3 py-1 rounded-full text-[9px] font-black uppercase">
+                      <Clock size={10}/> Pending
+                    </span>
+                  )}
+                </td>
+                <td className="px-8 py-4 text-center">
                   <button 
                     onClick={() => setSelectedGuest(g)}
-                    className="p-2 bg-slate-100 text-slate-600 rounded hover:bg-amber-500 hover:text-white transition-all"
+                    className="w-10 h-10 flex items-center justify-center bg-slate-100 text-slate-400 rounded-xl hover:bg-slate-900 hover:text-white transition-all shadow-sm active:scale-90"
                   >
-                    <Maximize2 size={14}/>
+                    <Maximize2 size={16}/>
                   </button>
                 </td>
               </tr>
@@ -993,23 +1380,35 @@ function ListView({ items, t, setZoomImg, user }: any) {
       </div>
 
       {selectedGuest && (
-        <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4 backdrop-blur-sm">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col">
-            <div className="p-6 border-b flex justify-between items-center bg-slate-50">
-              <h3 className="text-lg font-black text-slate-800 uppercase tracking-widest">Guest Details</h3>
-              <button onClick={() => setSelectedGuest(null)} className="text-gray-400 hover:text-red-500 transition-colors"><X size={24}/></button>
-            </div>
-            <div className="p-8 flex flex-col md:flex-row gap-8 overflow-y-auto">
-              <div className="w-full md:w-1/3">
-                <img 
-                  src={selectedGuest.idPhoto} 
-                  className="w-full aspect-[3/4] object-cover rounded-xl shadow-lg cursor-zoom-in border-4 border-white" 
-                  onClick={() => setZoomImg(selectedGuest.idPhoto)}
-                />
-                <p className="text-[10px] text-center mt-2 font-bold text-gray-400 uppercase">Click to Enlarge ID</p>
+        <div className="fixed inset-0 bg-slate-900/60 z-[100] flex items-center justify-center p-4 backdrop-blur-md animate-in fade-in duration-300">
+          <div className="bg-white rounded-[2.5rem] shadow-[0_50px_100px_rgba(0,0,0,0.3)] w-full max-w-3xl overflow-hidden flex flex-col animate-in zoom-in-95 duration-300">
+            <div className="p-8 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+              <div>
+                <h3 className="text-xl font-black text-slate-900 uppercase tracking-tighter">Guest Dossier</h3>
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">Record ID: {selectedGuest.id.slice(0,8)}</p>
               </div>
-              <div className="flex-1 space-y-6">
-                <div className="grid grid-cols-2 gap-6">
+              <button 
+                onClick={() => setSelectedGuest(null)} 
+                className="w-10 h-10 flex items-center justify-center bg-white text-slate-400 hover:text-red-500 rounded-full shadow-sm border border-slate-100 transition-colors"
+              >
+                <X size={20}/>
+              </button>
+            </div>
+            <div className="p-10 flex flex-col md:flex-row gap-10 overflow-y-auto max-h-[70vh] custom-scrollbar">
+              <div className="w-full md:w-2/5">
+                <div className="relative group">
+                  <img 
+                    src={selectedGuest.idPhoto} 
+                    className="w-full aspect-[3/4] object-cover rounded-3xl shadow-2xl cursor-zoom-in border-8 border-white group-hover:scale-[1.02] transition-transform duration-500" 
+                    onClick={() => setZoomImg(selectedGuest.idPhoto)}
+                  />
+                  <div className="absolute -bottom-4 left-1/2 -translate-x-1/2 bg-slate-900 text-white px-4 py-2 rounded-full text-[9px] font-black uppercase tracking-widest shadow-xl whitespace-nowrap">
+                    Digital ID Scan
+                  </div>
+                </div>
+              </div>
+              <div className="flex-1 space-y-8">
+                <div className="grid grid-cols-2 gap-8">
                   <DetailItem label={t.fullName} value={selectedGuest.fullName} />
                   <DetailItem label={t.guestPhone} value={selectedGuest.guestPhone} />
                   <DetailItem label={t.nationality} value={selectedGuest.nationality} />
@@ -1019,29 +1418,75 @@ function ListView({ items, t, setZoomImg, user }: any) {
                   <DetailItem label={t.duration} value={selectedGuest.duration} />
                   <DetailItem label={t.date} value={selectedGuest.checkInDate} />
                 </div>
-                <div className="p-4 bg-slate-50 rounded-xl border border-slate-100">
-                  <h5 className="text-[10px] font-black text-slate-400 uppercase mb-2">Property Information</h5>
-                  <div className="grid grid-cols-2 gap-4">
+                
+                <div className="p-6 bg-slate-50 rounded-2xl border border-slate-100">
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">Property Information</p>
+                  <div className="grid grid-cols-2 gap-6">
                     <DetailItem label={t.hotel} value={selectedGuest.hotelName} />
                     <DetailItem label={t.zone} value={selectedGuest.hotelZone} />
                     <DetailItem label={t.receptionistName} value={selectedGuest.receptionistName} />
                     <DetailItem label={t.phoneNumber} value={selectedGuest.receptionistPhone} />
                   </div>
                 </div>
-                {(user.role === UserRole.LOCAL_POLICE || user.role === UserRole.SUPER_POLICE) && selectedGuest.isWanted && (
-                  <div className="p-4 bg-red-50 border border-red-200 rounded-xl flex items-center gap-4 text-red-600">
-                    <ShieldAlert size={32} className="animate-bounce" />
-                    <div>
-                      <p className="text-xs font-black uppercase">Wanted Person Detected</p>
-                      <p className="text-[10px] font-bold">Immediate action required. Contact regional HQ.</p>
-                    </div>
+
+                <div className="pt-8 border-t border-slate-100">
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">Security Clearance</p>
+                  <div className="flex flex-col gap-4">
+                    {selectedGuest.isWanted ? (
+                      <div className="flex items-center gap-4 p-5 bg-red-50 border border-red-100 rounded-2xl text-red-600">
+                        <ShieldAlert size={32} className="animate-bounce" />
+                        <div>
+                          <p className="text-sm font-black uppercase tracking-tighter">Wanted Individual Detected</p>
+                          <p className="text-[10px] font-bold uppercase opacity-70">Immediate local police notification required</p>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-4 p-5 bg-emerald-50 border border-emerald-100 rounded-2xl text-emerald-600">
+                        <ShieldCheck size={32} />
+                        <div>
+                          <p className="text-sm font-black uppercase tracking-tighter">Identity Verified</p>
+                          <p className="text-[10px] font-bold uppercase opacity-70">No active security alerts found</p>
+                        </div>
+                      </div>
+                    )}
+
+                    {(user.role === UserRole.LOCAL_POLICE || user.role === UserRole.SUPER_POLICE) && (
+                      <div className="flex gap-2">
+                        <button 
+                          onClick={async () => {
+                            try {
+                              await setDoc(doc(db, 'guests', selectedGuest.id), { verificationStatus: 'verified' }, { merge: true });
+                              setSelectedGuest({...selectedGuest, verificationStatus: 'verified'});
+                            } catch (e) { console.error(e); }
+                          }}
+                          className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${selectedGuest.verificationStatus === 'verified' ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-emerald-50'}`}
+                        >
+                          Mark Verified
+                        </button>
+                        <button 
+                          onClick={async () => {
+                            try {
+                              await setDoc(doc(db, 'guests', selectedGuest.id), { verificationStatus: 'flagged' }, { merge: true });
+                              setSelectedGuest({...selectedGuest, verificationStatus: 'flagged'});
+                            } catch (e) { console.error(e); }
+                          }}
+                          className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${selectedGuest.verificationStatus === 'flagged' ? 'bg-red-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-red-50'}`}
+                        >
+                          Flag for Investigation
+                        </button>
+                      </div>
+                    )}
                   </div>
-                )}
+                </div>
               </div>
             </div>
-            <div className="p-6 border-t bg-slate-50 flex justify-end gap-4 no-print">
-              <button onClick={() => window.print()} className="px-6 py-2 bg-white border text-slate-600 rounded-lg text-[10px] font-black uppercase flex items-center gap-2 hover:bg-gray-50"><Printer size={14}/> {t.print}</button>
-              <button onClick={() => setSelectedGuest(null)} className="px-6 py-2 bg-slate-900 text-white rounded-lg text-[10px] font-black uppercase">{t.cancel}</button>
+            <div className="p-8 border-t border-slate-100 bg-slate-50/50 flex justify-end gap-4 no-print">
+              <button onClick={() => window.print()} className="px-8 py-3 bg-white border border-slate-200 text-slate-600 rounded-xl text-[11px] font-black uppercase tracking-widest flex items-center gap-2 hover:bg-slate-100 transition-all shadow-sm active:scale-95">
+                <Printer size={16} className="text-indigo-600"/> {t.print} Record
+              </button>
+              <button onClick={() => setSelectedGuest(null)} className="px-8 py-3 bg-slate-900 text-white rounded-xl text-[11px] font-black uppercase tracking-widest hover:bg-slate-800 transition-all shadow-lg shadow-slate-200 active:scale-95">
+                {t.cancel}
+              </button>
             </div>
           </div>
         </div>
@@ -1053,8 +1498,8 @@ function ListView({ items, t, setZoomImg, user }: any) {
 function DetailItem({ label, value }: any) {
   return (
     <div>
-      <p className="text-[9px] font-black text-gray-400 uppercase mb-1">{label}</p>
-      <p className="text-xs font-bold text-slate-800 uppercase">{value || 'N/A'}</p>
+      <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5">{label}</p>
+      <p className="text-sm font-black text-slate-900 uppercase tracking-tighter leading-tight">{value || 'N/A'}</p>
     </div>
   );
 }
@@ -1065,183 +1510,224 @@ function PoliceSettings({ t, lang, setLang, activePoliceZone, setActivePoliceZon
   const [showUserMgmt, setShowUserMgmt] = useState(false);
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6 pb-20">
-      <div className={`${isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border'} p-8 rounded-xl shadow-sm`}>
-        <div className="flex justify-between items-center mb-6">
-          <h3 className={`text-lg font-black uppercase flex items-center gap-2 ${isDarkMode ? 'text-slate-200' : 'text-slate-800'}`}>
-            <Settings size={20} className="text-amber-500"/> System Preferences
-          </h3>
-          <div className="flex items-center gap-2">
-            <div className={`w-2 h-2 rounded-full ${syncStatus === 'connected' ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'}`} />
-            <span className="text-[10px] font-black text-gray-400 uppercase">{syncStatus}</span>
+    <div className="max-w-5xl mx-auto space-y-10 pb-24 animate-in fade-in slide-in-from-bottom-4 duration-700">
+      <div className={`${isDarkMode ? 'bg-slate-900 border-slate-800 shadow-[0_30px_60px_rgba(0,0,0,0.3)]' : 'bg-white border-slate-100 shadow-[0_20px_50px_rgba(0,0,0,0.04)]'} p-10 rounded-[2.5rem] border transition-all duration-500`}>
+        <div className="flex justify-between items-center mb-10">
+          <div>
+            <h3 className={`text-2xl font-black uppercase tracking-tighter flex items-center gap-3 ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
+              <Settings size={28} className="text-amber-500 animate-[spin_4s_linear_infinite]"/> System Configuration
+            </h3>
+            <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mt-2">Terminal ID: {user.uid.slice(0,12)}</p>
+          </div>
+          <div className={`px-4 py-2 rounded-full border text-[10px] font-black uppercase tracking-widest flex items-center gap-2 ${isDarkMode ? 'bg-slate-800 border-slate-700 text-slate-400' : 'bg-slate-50 border-slate-100 text-slate-500'}`}>
+            <div className={`w-2 h-2 rounded-full ${syncStatus === 'synced' ? 'bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.5)]' : 'bg-amber-500 animate-pulse'}`}></div>
+            {syncStatus === 'synced' ? 'Cloud Synchronized' : 'Syncing...'}
           </div>
         </div>
-        
-        <div className="space-y-8">
-          {/* Profile Section */}
-          <div className={`flex items-center gap-4 p-4 rounded-lg border ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-slate-50 border-slate-100'}`}>
-             <div className="w-12 h-12 bg-amber-100 rounded-full flex items-center justify-center text-amber-700 font-black text-xl shadow-inner">
-                {user.username[0]}
-             </div>
-             <div>
-                <p className={`text-xs font-black uppercase ${isDarkMode ? 'text-slate-200' : 'text-slate-800'}`}>{user.username}</p>
-                <p className="text-[10px] text-gray-400 font-bold uppercase">{user.role} • Official Account</p>
-             </div>
-          </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className={`flex items-center justify-between p-4 rounded-lg border ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-slate-50 border-slate-100'}`}>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
+          <div className="space-y-8">
+            <div className={`p-6 rounded-3xl border transition-all ${isDarkMode ? 'bg-slate-800/50 border-slate-700' : 'bg-slate-50/50 border-slate-100'} flex items-center justify-between group hover:border-amber-500/30`}>
               <div>
-                <p className={`text-xs font-black uppercase ${isDarkMode ? 'text-slate-200' : 'text-slate-800'}`}>Language / ቋንቋ</p>
-                <p className="text-[10px] text-gray-400 font-bold uppercase">System display language</p>
+                <p className={`text-xs font-black uppercase tracking-tight ${isDarkMode ? 'text-slate-200' : 'text-slate-800'}`}>Language / ቋንቋ</p>
+                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mt-1">System display language</p>
               </div>
-              <div className="flex gap-2">
-                <button onClick={() => setLang('am')} className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase transition-all ${lang === 'am' ? 'bg-amber-500 text-white shadow-md' : 'bg-white border text-gray-400'}`}>አማርኛ</button>
-                <button onClick={() => setLang('en')} className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase transition-all ${lang === 'en' ? 'bg-amber-500 text-white shadow-md' : 'bg-white border text-gray-400'}`}>English</button>
+              <div className="flex gap-2 bg-white/5 p-1 rounded-xl border border-white/5">
+                <button onClick={() => setLang('am')} className={`px-5 py-2.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${lang === 'am' ? 'bg-amber-500 text-white shadow-lg shadow-amber-500/20' : 'text-slate-400 hover:text-slate-600'}`}>አማርኛ</button>
+                <button onClick={() => setLang('en')} className={`px-5 py-2.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${lang === 'en' ? 'bg-amber-500 text-white shadow-lg shadow-amber-500/20' : 'text-slate-400 hover:text-slate-600'}`}>English</button>
               </div>
             </div>
 
-            <div className={`flex items-center justify-between p-4 rounded-lg border ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-slate-50 border-slate-100'}`}>
+            <div className={`p-6 rounded-3xl border transition-all ${isDarkMode ? 'bg-slate-800/50 border-slate-700' : 'bg-slate-50/50 border-slate-100'} flex items-center justify-between group hover:border-amber-500/30`}>
               <div>
-                <p className={`text-xs font-black uppercase ${isDarkMode ? 'text-slate-200' : 'text-slate-800'}`}>Dark Mode</p>
-                <p className="text-[10px] text-gray-400 font-bold uppercase">Toggle visual theme</p>
+                <p className={`text-xs font-black uppercase tracking-tight ${isDarkMode ? 'text-slate-200' : 'text-slate-800'}`}>Visual Theme</p>
+                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mt-1">Dark mode interface</p>
               </div>
               <button 
-                onClick={setIsDarkMode}
-                className={`w-10 h-5 rounded-full transition-all relative ${isDarkMode ? 'bg-amber-500' : 'bg-gray-300'}`}
+                onClick={() => setIsDarkMode(!isDarkMode)}
+                className={`w-14 h-7 rounded-full transition-all relative p-1 ${isDarkMode ? 'bg-amber-500' : 'bg-slate-200'}`}
               >
-                <div className={`absolute top-1 w-3 h-3 bg-white rounded-full transition-all ${isDarkMode ? 'right-1' : 'left-1'}`} />
+                <div className={`w-5 h-5 bg-white rounded-full shadow-md transition-all transform ${isDarkMode ? 'translate-x-7' : 'translate-x-0'} flex items-center justify-center`}>
+                   {isDarkMode ? <Moon size={10} className="text-amber-600"/> : <Sun size={10} className="text-slate-400"/>}
+                </div>
               </button>
             </div>
           </div>
 
-          {user.role === UserRole.SUPER_POLICE && (
-            <div className={`p-4 rounded-lg border ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-slate-50 border-slate-100'}`}>
-              <div className="mb-4">
-                <p className={`text-xs font-black uppercase ${isDarkMode ? 'text-slate-200' : 'text-slate-800'}`}>Active Jurisdiction Monitoring</p>
-                <p className="text-[10px] text-gray-400 font-bold uppercase">Filter all regional data by specific zone</p>
+          <div className="space-y-8">
+            <div className={`p-6 rounded-3xl border transition-all ${isDarkMode ? 'bg-slate-800/50 border-slate-700' : 'bg-slate-50/50 border-slate-100'} flex items-center justify-between group hover:border-amber-500/30`}>
+              <div>
+                <p className={`text-xs font-black uppercase tracking-tight ${isDarkMode ? 'text-slate-200' : 'text-slate-800'}`}>Push Notifications</p>
+                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mt-1">Alerts for wanted persons</p>
               </div>
-              <select 
-                className={`w-full border rounded-lg px-4 py-3 font-bold text-sm outline-none focus:ring-2 focus:ring-amber-500 ${isDarkMode ? 'bg-slate-900 border-slate-700 text-slate-200' : 'bg-white border-slate-200'}`}
-                value={activePoliceZone}
-                onChange={(e) => setActivePoliceZone(e.target.value)}
+              <button 
+                onClick={() => setNotificationsEnabled(!notificationsEnabled)}
+                className={`w-14 h-7 rounded-full transition-all relative p-1 ${notificationsEnabled ? 'bg-indigo-600' : 'bg-slate-200'}`}
               >
-                <option value="All">All Jurisdictions (Regional Oversight)</option>
-                {ZONES.map(z => <option key={z} value={z}>{z}</option>)}
-              </select>
+                <div className={`w-5 h-5 bg-white rounded-full shadow-md transition-all transform ${notificationsEnabled ? 'translate-x-7' : 'translate-x-0'}`} />
+              </button>
             </div>
-          )}
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-             <div className={`p-4 rounded-lg border ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-slate-50 border-slate-100'} flex items-center justify-between`}>
-                <div>
-                  <p className={`text-[10px] font-black uppercase ${isDarkMode ? 'text-slate-200' : 'text-slate-800'}`}>Push Notifications</p>
-                  <p className="text-[8px] text-gray-400 font-bold uppercase">Alerts for wanted persons</p>
-                </div>
-                <button 
-                  onClick={() => setNotificationsEnabled(!notificationsEnabled)}
-                  className={`w-10 h-5 rounded-full transition-all relative ${notificationsEnabled ? 'bg-amber-500' : 'bg-gray-300'}`}
-                >
-                  <div className={`absolute top-1 w-3 h-3 bg-white rounded-full transition-all ${notificationsEnabled ? 'right-1' : 'left-1'}`} />
-                </button>
-             </div>
-             <div className={`p-4 rounded-lg border ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-slate-50 border-slate-100'} flex items-center justify-between`}>
-                <div>
-                  <p className={`text-[10px] font-black uppercase ${isDarkMode ? 'text-slate-200' : 'text-slate-800'}`}>Auto-Refresh Feed</p>
-                  <p className="text-[8px] text-gray-400 font-bold uppercase">Real-time data updates</p>
-                </div>
-                <button 
-                  onClick={() => setAutoRefresh(!autoRefresh)}
-                  className={`w-10 h-5 rounded-full transition-all relative ${autoRefresh ? 'bg-amber-500' : 'bg-gray-300'}`}
-                >
-                  <div className={`absolute top-1 w-3 h-3 bg-white rounded-full transition-all ${autoRefresh ? 'right-1' : 'left-1'}`} />
-                </button>
-             </div>
+            <div className={`p-6 rounded-3xl border transition-all ${isDarkMode ? 'bg-slate-800/50 border-slate-700' : 'bg-slate-50/50 border-slate-100'} flex items-center justify-between group hover:border-amber-500/30`}>
+              <div>
+                <p className={`text-xs font-black uppercase tracking-tight ${isDarkMode ? 'text-slate-200' : 'text-slate-800'}`}>Auto-Refresh Feed</p>
+                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mt-1">Real-time data updates</p>
+              </div>
+              <button 
+                onClick={() => setAutoRefresh(!autoRefresh)}
+                className={`w-14 h-7 rounded-full transition-all relative p-1 ${autoRefresh ? 'bg-indigo-600' : 'bg-slate-200'}`}
+              >
+                <div className={`w-5 h-5 bg-white rounded-full shadow-md transition-all transform ${autoRefresh ? 'translate-x-7' : 'translate-x-0'}`} />
+              </button>
+            </div>
           </div>
+        </div>
 
-          {user.role === UserRole.SUPER_POLICE && (
-            <div className="space-y-4">
+        {user.role === UserRole.SUPER_POLICE && (
+          <div className="mt-10 space-y-10">
+            <div className={`mt-10 p-8 rounded-[2rem] border transition-all ${isDarkMode ? 'bg-slate-800/30 border-slate-700' : 'bg-slate-50 border-slate-100'}`}>
+              <div className="mb-6">
+                <p className={`text-sm font-black uppercase tracking-tighter ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>Active Jurisdiction Oversight</p>
+                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">Filter all regional data by specific zone</p>
+              </div>
+              <div className="relative">
+                <Globe size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+                <select 
+                  className={`w-full border rounded-2xl pl-12 pr-6 py-4 font-black text-sm outline-none focus:ring-4 focus:ring-amber-500/10 focus:border-amber-500 transition-all appearance-none ${isDarkMode ? 'bg-slate-900 border-slate-700 text-white' : 'bg-white border-slate-200 text-slate-900'}`}
+                  value={activePoliceZone}
+                  onChange={(e) => setActivePoliceZone(e.target.value)}
+                >
+                  <option value="All">All Jurisdictions (Regional Oversight)</option>
+                  {ZONES.map(z => <option key={z} value={z}>{z}</option>)}
+                </select>
+                <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                   <ChevronDown size={20} />
+                </div>
+              </div>
+            </div>
+
+            {user.email?.endsWith('@shared.com') && (
+              <div className={`p-8 rounded-[2rem] border transition-all ${isDarkMode ? 'bg-red-900/10 border-red-900/20' : 'bg-red-50 border-red-100'}`}>
+                <div className="mb-6">
+                  <p className={`text-sm font-black uppercase tracking-tighter ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>Shared Account Session</p>
+                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">Reset your jurisdiction selection for this device</p>
+                </div>
+                <button 
+                  onClick={() => {
+                    localStorage.removeItem('begu_engeda_police_zone');
+                    window.location.reload();
+                  }}
+                  className="w-full py-4 bg-red-600 text-white rounded-2xl font-black uppercase text-xs tracking-widest hover:bg-red-700 transition-all shadow-lg"
+                >
+                  Reset Jurisdiction Selection
+                </button>
+              </div>
+            )}
+
+            <div className="space-y-6">
               <button 
                 onClick={() => setShowUserMgmt(!showUserMgmt)}
-                className={`w-full py-3 rounded-lg text-[10px] font-black uppercase flex items-center justify-center gap-2 border transition-all ${showUserMgmt ? 'bg-slate-900 text-white' : 'bg-white text-slate-600 hover:bg-slate-50'}`}
+                className={`w-full py-5 rounded-2xl text-[11px] font-black uppercase tracking-[0.2em] flex items-center justify-center gap-3 border transition-all duration-300 shadow-lg active:scale-95 ${showUserMgmt ? 'bg-slate-900 text-white border-slate-900 shadow-slate-200' : 'bg-white text-slate-600 border-slate-100 hover:bg-slate-50 shadow-slate-100'}`}
               >
-                <Users size={14}/> {showUserMgmt ? 'Hide User Directory' : 'View Active Personnel Directory'}
+                <Users size={18} className={showUserMgmt ? 'text-amber-500' : 'text-slate-400'}/> {showUserMgmt ? 'Hide Personnel Directory' : 'Access Personnel Directory'}
               </button>
               
               {showUserMgmt && (
-                <div className="animate-in fade-in slide-in-from-top-4 duration-300">
+                <div className="animate-in fade-in zoom-in-95 duration-500">
                   <UserManagement users={allUsers} t={t} isDarkMode={isDarkMode} />
                 </div>
               )}
             </div>
-          )}
+          </div>
+        )}
 
-          <div className={`p-4 rounded-lg border ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-slate-50 border-slate-100'}`}>
-            <p className={`text-xs font-black uppercase mb-4 ${isDarkMode ? 'text-slate-200' : 'text-slate-800'}`}>Security & Privacy</p>
-            <div className="space-y-3">
-              <div className="flex items-center justify-between text-[10px] font-bold text-gray-500 uppercase">
-                <span className="flex items-center gap-2"><CheckCircle2 size={12} className="text-emerald-500"/> Automatic Logout (Inactive)</span>
-                <span className="text-emerald-600">Enabled</span>
-              </div>
-              <div className="flex items-center justify-between text-[10px] font-bold text-gray-500 uppercase">
-                <span className="flex items-center gap-2"><CheckCircle2 size={12} className="text-emerald-500"/> Data Encryption</span>
-                <span className="text-emerald-600">Active (AES-256)</span>
-              </div>
-              <div className="flex items-center justify-between text-[10px] font-bold text-gray-500 uppercase">
-                <span className="flex items-center gap-2"><CheckCircle2 size={12} className="text-emerald-500"/> Audit Logging</span>
-                <span className="text-emerald-600">On</span>
-              </div>
-            </div>
+        <div className={`mt-10 p-8 rounded-[2rem] border transition-all ${isDarkMode ? 'bg-slate-800/30 border-slate-700' : 'bg-slate-50 border-slate-100'}`}>
+          <p className={`text-sm font-black uppercase tracking-tighter mb-6 ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>Security & Protocol Compliance</p>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+            <SecurityBadge label="Automatic Logout" status="Enabled" active={true} isDarkMode={isDarkMode} />
+            <SecurityBadge label="Data Encryption" status="AES-256 Active" active={true} isDarkMode={isDarkMode} />
+            <SecurityBadge label="Audit Logging" status="Continuous" active={true} isDarkMode={isDarkMode} />
           </div>
         </div>
       </div>
 
-      <div className={`${isDarkMode ? 'bg-amber-900/20 border-amber-900/30' : 'bg-amber-50 border-amber-100'} p-6 rounded-xl border flex items-center gap-4`}>
-        <ShieldCheck className="text-amber-500" size={32} />
+      <div className={`${isDarkMode ? 'bg-amber-900/10 border-amber-900/20' : 'bg-amber-50 border-amber-100'} p-10 rounded-[2.5rem] border flex items-center gap-8 shadow-xl shadow-amber-500/5`}>
+        <div className="w-20 h-20 bg-amber-500 rounded-3xl flex items-center justify-center text-white shadow-2xl shadow-amber-500/40 shrink-0">
+           <ShieldCheck size={40} />
+        </div>
         <div>
-          <p className={`text-xs font-black uppercase ${isDarkMode ? 'text-amber-200' : 'text-amber-800'}`}>Official Commission Terminal</p>
-          <p className={`text-[10px] font-bold leading-tight ${isDarkMode ? 'text-amber-300/70' : 'text-amber-700/70'}`}>This device is registered for official police use only. All actions are monitored by the Technology and Information Center. Unauthorized access is strictly prohibited.</p>
+          <p className={`text-lg font-black uppercase tracking-tighter ${isDarkMode ? 'text-amber-200' : 'text-amber-800'}`}>Official Commission Terminal</p>
+          <p className={`text-[11px] font-bold leading-relaxed mt-2 ${isDarkMode ? 'text-amber-300/60' : 'text-amber-700/60'}`}>
+            This device is registered for official police use only. All actions are monitored by the Technology and Information Center. 
+            Unauthorized access, data tampering, or protocol violation is strictly prohibited and punishable by law.
+          </p>
         </div>
       </div>
     </div>
   );
 }
 
+function SecurityBadge({ label, status, active, isDarkMode }: any) {
+  return (
+    <div className={`p-5 rounded-2xl border flex items-center justify-between ${isDarkMode ? 'bg-slate-900/50 border-slate-700' : 'bg-white border-slate-100 shadow-sm'}`}>
+      <div>
+        <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">{label}</p>
+        <p className={`text-[10px] font-black uppercase ${isDarkMode ? 'text-slate-200' : 'text-slate-900'}`}>{status}</p>
+      </div>
+      <CheckCircle2 size={16} className={active ? 'text-emerald-500' : 'text-slate-300'} />
+    </div>
+  );
+}
+
 function UserManagement({ users, t, isDarkMode }: any) {
   return (
-    <div className={`rounded-xl shadow border overflow-hidden ${isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}>
-      <table className="w-full text-left text-[11px] font-bold uppercase">
-        <thead className={isDarkMode ? 'bg-slate-800 text-slate-400' : 'bg-gray-50 text-gray-400'}>
-          <tr><th className="p-4">User</th><th className="p-4">Role</th><th className="p-4">Zone</th><th className="p-4">Last Active</th></tr>
-        </thead>
-        <tbody className={`divide-y ${isDarkMode ? 'divide-slate-800' : 'divide-slate-100'}`}>
-          {users.map((u: any) => (
-            <tr key={u.uid} className={isDarkMode ? 'hover:bg-slate-800/50' : 'hover:bg-gray-50'}>
-              <td className="p-4">
-                <div className="flex items-center gap-2">
-                  <div className="w-6 h-6 bg-amber-100 rounded flex items-center justify-center text-amber-700 text-[10px] font-black">{u.username[0]}</div>
-                  <div>
-                    <p className={isDarkMode ? 'text-slate-200' : 'text-slate-800'}>{u.username}</p>
-                    <p className="text-[8px] text-gray-400 lowercase font-medium">{u.email}</p>
-                  </div>
-                </div>
-              </td>
-              <td className="p-4">
-                <span className={`px-2 py-0.5 rounded-full text-[8px] font-black ${
-                  u.role === UserRole.SUPER_POLICE ? 'bg-purple-100 text-purple-700' : 
-                  u.role === UserRole.LOCAL_POLICE ? 'bg-blue-100 text-blue-700' : 
-                  'bg-green-100 text-green-700'
-                }`}>
-                  {u.role}
-                </span>
-              </td>
-              <td className="p-4 text-gray-400 font-medium">{u.zone || 'N/A'}</td>
-              <td className="p-4 text-gray-400 font-medium">{u.lastLogin ? new Date(u.lastLogin).toLocaleString() : 'Never'}</td>
+    <div className={`rounded-[2rem] shadow-[0_30px_60px_rgba(0,0,0,0.1)] border overflow-hidden transition-all duration-500 ${isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-100'}`}>
+      <div className="overflow-x-auto">
+        <table className="w-full text-left">
+          <thead className={`text-[10px] font-black uppercase tracking-widest ${isDarkMode ? 'bg-slate-800 text-slate-500' : 'bg-slate-50 text-slate-400'}`}>
+            <tr>
+              <th className="px-8 py-6">Personnel Identity</th>
+              <th className="px-6 py-6">Designation</th>
+              <th className="px-6 py-6">Jurisdiction</th>
+              <th className="px-8 py-6 text-right">Last Active Session</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
-      {users.length === 0 && <div className="p-10 text-center text-gray-300 font-black uppercase tracking-widest">No Personnel Found</div>}
+          </thead>
+          <tbody className={`divide-y text-[11px] font-bold uppercase ${isDarkMode ? 'divide-slate-800 text-slate-400' : 'divide-slate-50 text-slate-600'}`}>
+            {users.map((u: any) => (
+              <tr key={u.uid} className={`transition-colors ${isDarkMode ? 'hover:bg-slate-800/50' : 'hover:bg-slate-50/50'}`}>
+                <td className="px-8 py-5">
+                  <div className="flex items-center gap-4">
+                    <div className="w-10 h-10 bg-slate-100 rounded-xl flex items-center justify-center text-slate-500 text-xs font-black border border-slate-200 shadow-inner">{u.username[0]}</div>
+                    <div>
+                      <p className={`font-black tracking-tight ${isDarkMode ? 'text-slate-200' : 'text-slate-900'}`}>{u.username}</p>
+                      <p className="text-[9px] text-slate-400 lowercase font-bold tracking-wider">{u.email}</p>
+                    </div>
+                  </div>
+                </td>
+                <td className="px-6 py-5">
+                  <span className={`px-3 py-1 rounded-full text-[9px] font-black tracking-widest ${
+                    u.role === UserRole.SUPER_POLICE ? 'bg-purple-50 text-purple-600 border border-purple-100' : 
+                    u.role === UserRole.LOCAL_POLICE ? 'bg-blue-50 text-blue-600 border border-blue-100' : 
+                    'bg-emerald-50 text-emerald-600 border border-emerald-100'
+                  }`}>
+                    {u.role}
+                  </span>
+                </td>
+                <td className="px-6 py-5 text-[10px] font-black text-slate-400 tracking-widest">{u.zone || 'Global Oversight'}</td>
+                <td className="px-8 py-5 text-right text-[10px] font-black text-slate-400 tracking-widest">
+                   {u.lastLogin ? new Date(u.lastLogin).toLocaleString() : 'No Session History'}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {users.length === 0 && (
+        <div className="p-20 text-center space-y-4 opacity-30">
+           <Users size={64} className="mx-auto text-slate-300" />
+           <p className="text-[11px] font-black uppercase tracking-[0.3em] text-slate-400">No Personnel Records Found</p>
+        </div>
+      )}
     </div>
   );
 }
@@ -1387,7 +1873,7 @@ function ReportSection({ t, guests, user, hotelProfile }: any) {
       'Receptionist': g.receptionistName,
       'Receptionist Phone': g.receptionistPhone,
       'Check-in Date': g.checkInDate,
-      'Status': g.isWanted ? 'WANTED' : 'CLEAR'
+      'Status': g.isWanted ? 'WANTED' : g.verificationStatus?.toUpperCase() || 'PENDING'
     }));
     const ws = XLSX.utils.json_to_sheet(excelData);
     const wb = XLSX.utils.book_new();
@@ -1418,7 +1904,7 @@ function ReportSection({ t, guests, user, hotelProfile }: any) {
         g.duration,
         g.hotelName,
         g.checkInDate,
-        g.isWanted ? 'WANTED' : 'CLEAR'
+        g.isWanted ? 'WANTED' : g.verificationStatus?.toUpperCase() || 'PENDING'
       ]),
       theme: 'grid',
       headStyles: { fillStyle: '#1e293b' },
@@ -1672,6 +2158,94 @@ function ReportSection({ t, guests, user, hotelProfile }: any) {
       <div className="pt-10 border-t flex justify-between items-center text-[9px] font-bold text-gray-400 uppercase text-left no-print">
         <div><p className="mb-6">Auditor Certification</p><div className="h-px bg-gray-100 w-32 mb-1"></div><p className="opacity-40">{t.supervisorName}</p></div>
         <div className="text-right"><p className="mb-6">Regional Seal</p><div className="h-px bg-gray-100 w-32 ml-auto mb-1"></div><p className="opacity-40">{t.signature}</p></div>
+      </div>
+    </div>
+  );
+}
+
+function MapView({ hotels, guests, t, user, selectedHotel, setSelectedHotel }: any) {
+  const center: [number, number] = useMemo(() => [9.03, 38.74], []); // Addis Ababa center
+  
+  // Mock coordinates for hotels if they don't have them
+  const hotelsWithCoords = useMemo(() => {
+    return hotels.map((h: any) => ({
+      ...h,
+      lat: h.lat || center[0] + (Math.random() - 0.5) * 0.1,
+      lng: h.lng || center[1] + (Math.random() - 0.5) * 0.1
+    }));
+  }, [hotels, center]);
+
+  const filteredHotels = useMemo(() => {
+    if (user?.role === UserRole.LOCAL_POLICE && user.zone) {
+      return hotelsWithCoords.filter((h: any) => h.zone === user.zone);
+    }
+    return hotelsWithCoords;
+  }, [hotelsWithCoords, user]);
+
+  return (
+    <div className="h-[calc(100vh-200px)] bg-white rounded-[2rem] shadow-xl border border-slate-100 overflow-hidden flex flex-col md:flex-row">
+      <div className="flex-1 relative z-10">
+        <MapContainer center={center} zoom={13} style={{ height: '100%', width: '100%' }}>
+          <TileLayer
+            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+          />
+          {filteredHotels.map((h: any) => (
+            <Marker 
+              key={h.id} 
+              position={[h.lat, h.lng]} 
+              eventHandlers={{
+                click: () => setSelectedHotel(h),
+              }}
+            >
+              <Popup>
+                <div className="p-2">
+                  <h4 className="font-black text-slate-900 uppercase text-xs mb-1">{h.name}</h4>
+                  <p className="text-[10px] text-slate-500 font-bold uppercase">{h.address}</p>
+                  <p className="text-[9px] text-amber-600 font-black uppercase mt-1">{h.zone}</p>
+                </div>
+              </Popup>
+            </Marker>
+          ))}
+        </MapContainer>
+      </div>
+      
+      <div className="w-full md:w-80 bg-slate-50 border-l border-slate-100 p-6 overflow-y-auto custom-scrollbar">
+        <h3 className="text-sm font-black text-slate-900 uppercase tracking-widest mb-6 flex items-center gap-2">
+          <Building2 size={18} className="text-amber-500" />
+          Establishment Registry
+        </h3>
+        
+        <div className="space-y-4">
+          {filteredHotels.map((h: any) => (
+            <div 
+              key={h.id} 
+              onClick={() => setSelectedHotel(h)}
+              className={`p-4 rounded-2xl border transition-all cursor-pointer ${selectedHotel?.id === h.id ? 'bg-white border-amber-500 shadow-lg scale-[1.02]' : 'bg-white/50 border-slate-100 hover:bg-white hover:border-slate-200'}`}
+            >
+              <p className="text-[11px] font-black text-slate-900 uppercase leading-tight mb-1">{h.name}</p>
+              <p className="text-[9px] text-slate-400 font-bold uppercase tracking-wider">{h.zone}</p>
+              {selectedHotel?.id === h.id && (
+                <div className="mt-4 pt-4 border-t border-slate-100 space-y-3 animate-in fade-in slide-in-from-top-2">
+                  <div className="flex items-center gap-2">
+                    <UserIcon size={12} className="text-slate-400" />
+                    <span className="text-[10px] font-bold text-slate-600 uppercase">{h.receptionistName}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Phone size={12} className="text-slate-400" />
+                    <span className="text-[10px] font-bold text-slate-600 uppercase">{h.phoneNumber}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Users size={12} className="text-slate-400" />
+                    <span className="text-[10px] font-black text-indigo-600 uppercase">
+                      {guests.filter((g: any) => g.hotelId === h.id).length} Active Guests
+                    </span>
+                  </div>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );
