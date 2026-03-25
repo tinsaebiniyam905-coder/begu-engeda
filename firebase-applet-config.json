@@ -1,0 +1,11 @@
+{
+  "projectId": "begu-engda",
+  "appId": "1:160228118540:web:a6d1c43fd7538c0099de29",
+  "apiKey": "AIzaSyBg4CnebgRj2n5DspjuELhB4hYidsWToRY",
+  "authDomain": "begu-engda.firebaseapp.com",
+  "databaseURL": "https://begu-engda-default-rtdb.firebaseio.com",
+  "firestoreDatabaseId": "(default)",
+  "storageBucket": "begu-engda.firebasestorage.app",
+  "messagingSenderId": "160228118540",
+  "measurementId": "G-FDSJBH4FB0"
+}
