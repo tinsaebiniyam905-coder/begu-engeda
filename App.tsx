@@ -844,7 +844,7 @@ function AppContent() {
           )}
           {(user?.role === UserRole.LOCAL_POLICE || user?.role === UserRole.SUPER_POLICE) && (
             <>
-              <NavItem icon={<Map size={18}/>} label={t.map} active={view === 'map'} onClick={() => setView('map')} />
+              <NavItem icon={<Map size={18}/>} label={t.mapView} active={view === 'map'} onClick={() => setView('map')} />
               <NavItem icon={<Plus size={18}/>} label={t.policeNotice} active={view === 'addWanted'} onClick={() => setView('addWanted')} />
               <NavItem icon={<AlertTriangle size={18}/>} label={t.wantedPersons} active={view === 'wantedPersons'} onClick={() => setView('wantedPersons')} />
               <NavItem icon={<Users size={18}/>} label={t.guestList} active={view === 'guestList'} onClick={() => setView('guestList')} />
