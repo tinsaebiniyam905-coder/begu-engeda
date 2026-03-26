@@ -15,9 +15,9 @@ import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import L from 'leaflet';
 
 // Fix for default marker icons in Leaflet
-import markerIcon from 'leaflet/dist/images/marker-icon.png';
-import markerIconRetina from 'leaflet/dist/images/marker-icon-2x.png';
-import markerShadow from 'leaflet/dist/images/marker-shadow.png';
+import markerIcon from 'leaflet/dist/images/marker-icon.png?url';
+import markerIconRetina from 'leaflet/dist/images/marker-icon-2x.png?url';
+import markerShadow from 'leaflet/dist/images/marker-shadow.png?url';
 
 const DefaultIcon = L.icon({
     iconUrl: markerIcon,
