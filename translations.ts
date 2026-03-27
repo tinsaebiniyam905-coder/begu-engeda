@@ -6,7 +6,7 @@ export const translations = {
     policeCommission: "ቤንሻንጉል ጉምዝ ክልል ፖሊስ ኮሚሽን",
     developedBy: "ቤንሻንጉል ጉምዝ ክልል ፖሊስ ኮሚሽን ቴክኖሎጂ እና መረጃ ማዕከል",
     motto: "በጀግንነት መጠበቅ በሰብዓዊነት ማገልገል",
-    developerCredit: "በቤንሻንጉል ጉሙዝ ክልል ፖሊስ ኮሚሽን ቴክኖሎጂ እና መረጃ ማዕከል የተዘጋጀ",
+    developerCredit: "በቴክኖሎጂ ማዕከል የተዘጋጀ",
 
     login: "ይግቡ",
     username: "ተጠቃሚ ስም",
@@ -14,21 +14,26 @@ export const translations = {
     logout: "ውጣ",
 
     dashboard: "ዳሽቦርድ",
-    mapView: "ካርታ",   // ✅ FIXED
+    mapView: "ካርታ",
     registerGuest: "እንግዳ ይመዝግቡ",
     guestList: "የእንግዳ ዝርዝር",
     wantedPersons: "ተፈላጊ ሰዎች",
     reports: "ሪፖርቶች",
 
-    fullName: "ሙሉ ስም (ከአያት ጋር)",
-    nationality: "ዜግነት",
-    guestPhone: "የእንግዳው ስልክ ቁጥር",
-    origin: "ከየት መጡ?",
-    purpose: "ለምን መጡ?",
-    duration: "ስንት ጊዜ ይቆያሉ?",
-    roomNumber: "የአልጋ ቁጥር",
+    policeNotice: "ተፈላጊ ጨምር",
+    hotelDirectory: "የሆቴሎች ዝርዝር",
+    notifications: "ማሳወቂያዎች",
+    appUtility: "የአፕ ጥቅም",
 
-    idPhoto: "የመታወቂያ ፎቶ",
+    fullName: "ሙሉ ስም",
+    nationality: "ዜግነት",
+    guestPhone: "ስልክ",
+    origin: "መጣበት",
+    purpose: "ዓላማ",
+    duration: "ቆይታ",
+    roomNumber: "ክፍል",
+
+    idPhoto: "ፎቶ",
     capturePhoto: "ፎቶ አንሳ",
     fromGallery: "ከጋለሪ",
     submit: "ላክ",
@@ -39,15 +44,15 @@ export const translations = {
     settings: "ማስተካከያ",
     save: "አስቀምጥ",
 
-    searchPlaceholder: "ይፈልጉ...",
+    searchPlaceholder: "ፈልግ...",
     allJurisdictions: "ሁሉም ዞኖች"
   },
 
   en: {
     appName: "Begu Engeda",
-    policeCommission: "Benishangul Gumuz Region Police Commission",
-    developedBy: "Technology and Information Center",
-    motto: "Protect with Heroism, Serve with Humanity",
+    policeCommission: "Benishangul Gumuz Police Commission",
+    developedBy: "Technology Center",
+    motto: "Protect with Heroism",
 
     login: "Login",
     username: "Username",
@@ -55,23 +60,28 @@ export const translations = {
     logout: "Logout",
 
     dashboard: "Dashboard",
-    mapView: "Map",   // ✅ FIXED
+    mapView: "Map",
     registerGuest: "Register Guest",
     guestList: "Guest List",
     wantedPersons: "Wanted Persons",
     reports: "Reports",
 
+    policeNotice: "Add Wanted",
+    hotelDirectory: "Hotel Directory",
+    notifications: "Notifications",
+    appUtility: "App Utility",
+
     fullName: "Full Name",
     nationality: "Nationality",
-    guestPhone: "Phone Number",
+    guestPhone: "Phone",
     origin: "Origin",
     purpose: "Purpose",
     duration: "Duration",
-    roomNumber: "Room Number",
+    roomNumber: "Room",
 
-    idPhoto: "ID Photo",
-    capturePhoto: "Capture Photo",
-    fromGallery: "From Gallery",
+    idPhoto: "Photo",
+    capturePhoto: "Capture",
+    fromGallery: "Gallery",
     submit: "Submit",
 
     print: "Print",
