@@ -4,9 +4,9 @@ export const translations = {
   am: {
     appName: "ቤጉ እንግዳ",
     policeCommission: "ቤንሻንጉል ጉምዝ ክልል ፖሊስ ኮሚሽን",
-    developedBy: "ቤንሻንጉል ጉምዝ ክልል ፖሊስ ኮሚሽን ቴክኖሎጂ እና መረጃ ማዕከል",
+    developedBy: "ቴክኖሎጂ እና መረጃ ማዕከል",
+    developerCredit: "በቤንሻንጉል ጉሙዝ ፖሊስ ኮሚሽን የተዘጋጀ",
     motto: "በጀግንነት መጠበቅ በሰብዓዊነት ማገልገል",
-    developerCredit: "በቴክኖሎጂ ማዕከል የተዘጋጀ",
 
     login: "ይግቡ",
     username: "ተጠቃሚ ስም",
@@ -20,21 +20,18 @@ export const translations = {
     wantedPersons: "ተፈላጊ ሰዎች",
     reports: "ሪፖርቶች",
 
-    policeNotice: "ተፈላጊ ጨምር",
-    hotelDirectory: "የሆቴሎች ዝርዝር",
-    notifications: "ማሳወቂያዎች",
-    appUtility: "የአፕ ጥቅም",
+    alertWantedFound: "⚠ ተፈላጊ ግለሰብ ተገኝቷል!",
 
     fullName: "ሙሉ ስም",
     nationality: "ዜግነት",
     guestPhone: "ስልክ",
-    origin: "መጣበት",
+    origin: "መጣበት ቦታ",
     purpose: "ዓላማ",
     duration: "ቆይታ",
-    roomNumber: "ክፍል",
+    roomNumber: "ክፍል ቁጥር",
 
     idPhoto: "ፎቶ",
-    capturePhoto: "ፎቶ አንሳ",
+    capturePhoto: "አንሳ",
     fromGallery: "ከጋለሪ",
     submit: "ላክ",
 
@@ -44,6 +41,13 @@ export const translations = {
     settings: "ማስተካከያ",
     save: "አስቀምጥ",
 
+    termsTitle: "የአጠቃቀም ስምምነት",
+    termsBody: "ይህን ሲስተም በህግ መሰረት እጠቀማለሁ ብዬ እስማማለሁ።",
+    agree: "እስማማለሁ",
+    cancel: "ሰርዝ",
+
+    utilityText: "ይህ ሲስተም ለፖሊስ እና ሆቴሎች የደህንነት ክትትል ይረዳል።",
+
     searchPlaceholder: "ፈልግ...",
     allJurisdictions: "ሁሉም ዞኖች"
   },
@@ -51,8 +55,9 @@ export const translations = {
   en: {
     appName: "Begu Engeda",
     policeCommission: "Benishangul Gumuz Police Commission",
-    developedBy: "Technology Center",
-    motto: "Protect with Heroism",
+    developedBy: "Technology and Information Center",
+    developerCredit: "Developed by BGR Police Commission",
+    motto: "Protect with Heroism, Serve with Humanity",
 
     login: "Login",
     username: "Username",
@@ -66,10 +71,7 @@ export const translations = {
     wantedPersons: "Wanted Persons",
     reports: "Reports",
 
-    policeNotice: "Add Wanted",
-    hotelDirectory: "Hotel Directory",
-    notifications: "Notifications",
-    appUtility: "App Utility",
+    alertWantedFound: "⚠ Wanted person detected!",
 
     fullName: "Full Name",
     nationality: "Nationality",
@@ -77,7 +79,7 @@ export const translations = {
     origin: "Origin",
     purpose: "Purpose",
     duration: "Duration",
-    roomNumber: "Room",
+    roomNumber: "Room Number",
 
     idPhoto: "Photo",
     capturePhoto: "Capture",
@@ -89,6 +91,13 @@ export const translations = {
 
     settings: "Settings",
     save: "Save",
+
+    termsTitle: "Terms Agreement",
+    termsBody: "I agree to use this system responsibly.",
+    agree: "Agree",
+    cancel: "Cancel",
+
+    utilityText: "This system helps police monitor guests and improve security.",
 
     searchPlaceholder: "Search...",
     allJurisdictions: "All Jurisdictions"
