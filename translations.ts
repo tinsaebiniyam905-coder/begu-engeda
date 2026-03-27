@@ -49,7 +49,12 @@ export const translations = {
     utilityText: "ይህ ሲስተም ለፖሊስ እና ሆቴሎች የደህንነት ክትትል ይረዳል።",
 
     searchPlaceholder: "ፈልግ...",
-    allJurisdictions: "ሁሉም ዞኖች"
+    allJurisdictions: "ሁሉም ዞኖች",
+
+    appUtility: "የአፕ አስፈላጊነት",
+    policeNotice: "የፖሊስ ማስጠንቀቂያ",
+    hotelDirectory: "የሆቴሎች ዝርዝር",
+    notifications: "ማሳወቂያዎች",
   },
 
   en: {
@@ -100,6 +105,11 @@ export const translations = {
     utilityText: "This system helps police monitor guests and improve security.",
 
     searchPlaceholder: "Search...",
-    allJurisdictions: "All Jurisdictions"
+    allJurisdictions: "All Jurisdictions",
+
+    appUtility: "App Utility",
+    policeNotice: "Police Notice",
+    hotelDirectory: "Hotel Directory",
+    notifications: "Notifications",
   }
 };
